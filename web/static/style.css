@@ -27,15 +27,16 @@
 html { 
   -webkit-text-size-adjust: 100%; 
   scroll-behavior: smooth;
-}
-
-body {
-  margin: 0;
   background: var(--bg);
   background-image: 
     radial-gradient(circle at 15% 20%, rgba(214, 28, 63, 0.05) 0%, transparent 40%),
     radial-gradient(circle at 85% 75%, rgba(255, 75, 110, 0.05) 0%, transparent 45%);
   background-attachment: fixed;
+}
+
+body {
+  margin: 0;
+  background: transparent;
   color: var(--text);
   font-family: var(--font);
   line-height: 1.6;

@@ -245,7 +245,7 @@ func (c *Client) fetchAllRepos(ctx context.Context) ([]Repo, error) {
 			return nil, err
 		}
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("github repos: %s: %s", resp.Status, strings.TrimSpace(string(body)))
 		}
@@ -286,7 +286,7 @@ func (c *Client) enrichPRCounts(ctx context.Context, repos []Repo) {
 		}
 
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			log.Printf("[warn] search open PRs API returned status %s: %s, falling back to per-repo pulls endpoint", resp.Status, string(body))
@@ -356,7 +356,9 @@ func (c *Client) openPRCount(ctx context.Context, repo string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("github pulls %s: %s", repo, resp.Status)
 	}
@@ -411,7 +413,9 @@ func (c *Client) fetchReadmeMarkdown(ctx context.Context, repo string) (string, 
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode == http.StatusNotFound {
 		return "", nil
 	}

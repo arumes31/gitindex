@@ -67,6 +67,6 @@ func runHealthcheck() {
 		fmt.Println("unhealthy")
 		os.Exit(1)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	fmt.Println("ok")
 }

@@ -92,7 +92,9 @@ func (h *Handler) fetch(ctx context.Context, u *url.URL) (cachedImage, error) {
 	if err != nil {
 		return cachedImage{}, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return cachedImage{}, fmt.Errorf("status %d", resp.StatusCode)
 	}
@@ -116,7 +118,7 @@ func writeImage(w http.ResponseWriter, img cachedImage, cached bool) {
 	} else {
 		w.Header().Set("X-Cache", "MISS")
 	}
-	w.Write(img.data)
+	_, _ = w.Write(img.data)
 }
 
 // validateURL enforces https and blocks private/loopback/link-local targets.
