@@ -38,7 +38,7 @@ func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
 
 	readme, err := s.gh.ReadmeHTML(r.Context(), *repo)
 	if err != nil {
-		log.Printf("[warn] readme for %q: %v", repo.Name, err)
+		log.Printf("[warn] readme for %q: %v", repo.Name, err) // #nosec G706 -- %q escapes control chars (newlines), preventing log injection
 	}
 
 	d := s.base(r)
@@ -91,7 +91,7 @@ func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serverError(w http.ResponseWriter, r *http.Request, err error) {
-	log.Printf("[error] %q: %v", r.URL.Path, err)
+	log.Printf("[error] %q: %v", r.URL.Path, err) // #nosec G706 -- %q escapes control chars (newlines), preventing log injection
 	d := s.base(r)
 	d.Canonical = s.cfg.SiteURL + "/"
 	d.Title = "Error · " + s.cfg.SiteName
