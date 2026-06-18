@@ -62,11 +62,12 @@ func runHealthcheck() {
 		port = "6541"
 	}
 	client := &http.Client{Timeout: 3 * time.Second}
+	// #nosec G704 -- fixed loopback host; port is operator-set, not attacker-controlled
 	resp, err := client.Get("http://127.0.0.1:" + port + "/healthz")
 	if err != nil || resp.StatusCode != http.StatusOK {
 		fmt.Println("unhealthy")
 		os.Exit(1)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	fmt.Println("ok")
 }

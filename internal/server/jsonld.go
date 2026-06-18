@@ -54,5 +54,5 @@ func buildJSONLD(d pageData) template.HTML {
 	}
 	tag := `<script type="application/ld+json" nonce="` +
 		template.HTMLEscapeString(d.Nonce) + `">` + string(b) + `</script>`
-	return template.HTML(tag) //nolint:gosec // JSON is escaped; nonce is escaped
+	return template.HTML(tag) // #nosec G203 -- JSON is marshaled (not raw) and the nonce is HTML-escaped
 }

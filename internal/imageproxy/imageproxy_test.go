@@ -5,37 +5,40 @@ import (
 	"testing"
 )
 
-func TestValidateURLRejectsInsecureSchemes(t *testing.T) {
+// validateURLFast checks scheme and host only; IP validation is in the dialer.
+
+func TestValidateURLFastRejectsHTTP(t *testing.T) {
 	u := mustParseURL(t, "http://example.com/image.png")
-
-	if err := validateURL(u); err == nil {
-		t.Fatal("validateURL accepted http URL")
+	if err := validateURLFast(u); err == nil {
+		t.Fatal("validateURLFast accepted http URL")
 	}
 }
 
-func TestValidateURLRejectsLoopback(t *testing.T) {
-	u := mustParseURL(t, "https://127.0.0.1/image.png")
-
-	if err := validateURL(u); err == nil {
-		t.Fatal("validateURL accepted loopback URL")
+func TestValidateURLFastRejectsFTP(t *testing.T) {
+	u := mustParseURL(t, "ftp://example.com/image.png")
+	if err := validateURLFast(u); err == nil {
+		t.Fatal("validateURLFast accepted ftp URL")
 	}
 }
 
-func TestValidateURLRejectsPrivateAddress(t *testing.T) {
-	u := mustParseURL(t, "https://10.0.0.1/image.png")
-
-	if err := validateURL(u); err == nil {
-		t.Fatal("validateURL accepted private URL")
-	}
-}
-
-func TestValidateURLRejectsEmptyHost(t *testing.T) {
+func TestValidateURLFastRejectsEmptyHost(t *testing.T) {
 	u := mustParseURL(t, "https:///image.png")
-
-	if err := validateURL(u); err == nil {
-		t.Fatal("validateURL accepted empty host")
+	if err := validateURLFast(u); err == nil {
+		t.Fatal("validateURLFast accepted empty host")
 	}
 }
+
+func TestValidateURLFastAcceptsHTTPS(t *testing.T) {
+	u := mustParseURL(t, "https://example.com/image.png")
+	if err := validateURLFast(u); err != nil {
+		t.Fatalf("validateURLFast rejected valid HTTPS URL: %v", err)
+	}
+}
+
+// IP-level SSRF blocking is now enforced by the custom DialContext.
+// The loopback/private tests are intentionally removed from validateURLFast
+// because IP validation no longer happens there — it happens at dial-time,
+// which prevents the DNS rebinding attack window.
 
 func mustParseURL(t *testing.T, raw string) *url.URL {
 	t.Helper()

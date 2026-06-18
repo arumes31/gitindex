@@ -16,7 +16,7 @@ var (
 func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	fmt.Fprintf(w, "User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n", s.cfg.SiteURL)
+	_, _ = fmt.Fprintf(w, "User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n", s.cfg.SiteURL)
 }
 
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
@@ -74,12 +74,13 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			time.Sleep(3 * time.Second) // wait for server to start serving
 			pingURL := fmt.Sprintf("https://www.bing.com/ping?sitemap=%s", sitemapURL)
+			// #nosec G107 -- fixed bing.com host; only the sitemap query param derives from config
 			resp, err := http.Get(pingURL)
 			if err != nil {
 				log.Printf("[info] automatic sitemap submission to Bing failed: %v", err)
 				return
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			log.Printf("[info] automatic sitemap submission to Bing succeeded with status: %s", resp.Status)
 		}()
 	})

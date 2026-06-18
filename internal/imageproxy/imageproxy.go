@@ -3,8 +3,8 @@
 // strict Content-Security-Policy (img-src 'self') can be enforced.
 //
 // Fetched images are cached in Redis. The fetcher is hardened against SSRF:
-// https only, and any URL resolving to a private/loopback/link-local address
-// is refused.
+// https only, and any address resolving to a private/loopback/link-local IP
+// is refused at TCP dial-time (not just pre-flight) to prevent DNS rebinding.
 package imageproxy
 
 import (
@@ -36,12 +36,56 @@ func New(c *cache.Cache, ttl time.Duration) *Handler {
 		ttl:   ttl,
 		http: &http.Client{
 			Timeout: 12 * time.Second,
-			// Don't follow redirects to other hosts blindly — re-validate each hop.
+			Transport: &http.Transport{
+				// Validate the resolved IP at dial-time, not just before the
+				// request. This closes the DNS rebinding window where a DNS
+				// server returns a public IP during validateURLFast() but
+				// rebinds to a private IP during the actual TCP connect.
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					host, port, err := net.SplitHostPort(addr)
+					if err != nil {
+						return nil, fmt.Errorf("invalid addr %q: %w", addr, err)
+					}
+					ips, err := net.DefaultResolver.LookupHost(ctx, host)
+					if err != nil {
+						return nil, fmt.Errorf("dns lookup failed for %q: %w", host, err)
+					}
+					var validated []string
+					for _, ipStr := range ips {
+						ip := net.ParseIP(ipStr)
+						if ip == nil {
+							continue
+						}
+						if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+							ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+							return nil, fmt.Errorf("target address %s not allowed", ipStr)
+						}
+						validated = append(validated, ipStr)
+					}
+					if len(validated) == 0 {
+						return nil, fmt.Errorf("no usable address for %q", host)
+					}
+					// Dial the validated IPs directly (no second DNS round-trip,
+					// which could rebind), trying each in turn so an unreachable
+					// address on a dual-stack host falls back to the next.
+					dialer := &net.Dialer{Timeout: 10 * time.Second}
+					var dialErr error
+					for _, ipStr := range validated {
+						conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ipStr, port))
+						if err == nil {
+							return conn, nil
+						}
+						dialErr = err
+					}
+					return nil, dialErr
+				},
+			},
+			// Re-validate each redirect hop at the URL level (scheme check).
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 4 {
 					return fmt.Errorf("too many redirects")
 				}
-				return validateURL(req.URL)
+				return validateURLFast(req.URL)
 			},
 		},
 	}
@@ -59,7 +103,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, err := url.Parse(raw)
-	if err != nil || validateURL(u) != nil {
+	if err != nil || validateURLFast(u) != nil {
 		http.Error(w, "invalid or disallowed url", http.StatusBadRequest)
 		return
 	}
@@ -82,17 +126,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) fetch(ctx context.Context, u *url.URL) (cachedImage, error) {
+	// #nosec G704 -- u passed validateURLFast (https-only); resolved IPs are re-checked at dial-time
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return cachedImage{}, err
 	}
 	req.Header.Set("User-Agent", "gitindex-imageproxy")
 	req.Header.Set("Accept", "image/*")
+	// #nosec G704 -- request URL validated; transport DialContext re-validates resolved IPs (SSRF/rebind guard)
 	resp, err := h.http.Do(req)
 	if err != nil {
 		return cachedImage{}, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return cachedImage{}, fmt.Errorf("status %d", resp.StatusCode)
 	}
@@ -116,27 +164,19 @@ func writeImage(w http.ResponseWriter, img cachedImage, cached bool) {
 	} else {
 		w.Header().Set("X-Cache", "MISS")
 	}
-	w.Write(img.data)
+	_, _ = w.Write(img.data)
 }
 
-// validateURL enforces https and blocks private/loopback/link-local targets.
-func validateURL(u *url.URL) error {
+// validateURLFast performs a fast pre-flight check: https scheme only and
+// non-empty host. IP-level SSRF validation is done at dial-time by the
+// custom DialContext above, which closes the DNS rebinding attack window.
+func validateURLFast(u *url.URL) error {
 	if u.Scheme != "https" {
 		return fmt.Errorf("scheme not allowed")
 	}
 	host := u.Hostname()
 	if host == "" {
 		return fmt.Errorf("empty host")
-	}
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		return fmt.Errorf("dns lookup failed")
-	}
-	for _, ip := range ips {
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-			ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
-			return fmt.Errorf("target address not allowed")
-		}
 	}
 	return nil
 }
