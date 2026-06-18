@@ -390,7 +390,7 @@ func (c *Client) RepoBySlug(ctx context.Context, slug string) (*Repo, error) {
 
 // ReadmeHTML returns rendered, sanitized README HTML (Redis-cached >= 24h).
 func (c *Client) ReadmeHTML(ctx context.Context, r Repo) (string, error) {
-	key := "readme:html:v1:" + strings.ToLower(r.Name)
+	key := "readme:html:v2:" + strings.ToLower(r.Name)
 	if b, ok := c.cache.GetBytes(ctx, key); ok {
 		return string(b), nil
 	}

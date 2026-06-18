@@ -273,6 +273,9 @@ a:hover { color: #ff738f; text-decoration: none; }
 }
 
 .readme-empty { color: var(--text-muted); }
+/* When README has no headings: hide sidebar, let readme fill full row */
+.readme-full-width { width: 100%; }
+.hidden { display: none !important; }
 
 /* ---------- Prose / legal ---------- */
 .prose { padding: 32px 0 64px; max-width: 80ch; }
@@ -387,6 +390,7 @@ code { font-family: var(--mono); background: var(--bg-elev-2); padding: 0.2em 0.
 }
 .feedback-actions { display: flex; justify-content: flex-end; }
 .feedback-success { color: #50fa7b; font-size: 0.82rem; margin: 8px 0 0; text-align: center; }
+.feedback-error-text { color: #ff6b87; }
 
 /* ---------- Code Copy Buttons (29) ---------- */
 .code-block-wrapper { position: relative; }

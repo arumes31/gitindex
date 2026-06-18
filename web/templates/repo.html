@@ -80,8 +80,9 @@
         } else {
           // If no headings, hide sidetoc
           const sidetoc = document.querySelector('.toc-sidebar');
-          if (sidetoc) sidetoc.style.display = 'none';
-          document.querySelector('.readme-section').style.width = '100%';
+          if (sidetoc) sidetoc.classList.add('hidden');
+          const rdSection = document.querySelector('.readme-section');
+          if (rdSection) rdSection.classList.add('readme-full-width');
         }
       }
 
