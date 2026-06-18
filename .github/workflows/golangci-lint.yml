@@ -21,6 +21,10 @@ jobs:
           cache: true
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: v1.64
+          version: v2.12.2
+          # Build golangci-lint from source with the Go above (1.26.4) so its
+          # build version is >= the module's targeted Go version. The prebuilt
+          # binaries are compiled with an older Go and would be rejected.
+          install-mode: goinstall
