@@ -50,6 +50,7 @@ func New(c *cache.Cache, ttl time.Duration) *Handler {
 					if err != nil {
 						return nil, fmt.Errorf("dns lookup failed for %q: %w", host, err)
 					}
+					var validated []string
 					for _, ipStr := range ips {
 						ip := net.ParseIP(ipStr)
 						if ip == nil {
@@ -59,11 +60,24 @@ func New(c *cache.Cache, ttl time.Duration) *Handler {
 							ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
 							return nil, fmt.Errorf("target address %s not allowed", ipStr)
 						}
+						validated = append(validated, ipStr)
 					}
-					// Dial using the first resolved address directly to avoid
-					// a second DNS round-trip (which could rebind).
-					return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(
-						ctx, network, net.JoinHostPort(ips[0], port))
+					if len(validated) == 0 {
+						return nil, fmt.Errorf("no usable address for %q", host)
+					}
+					// Dial the validated IPs directly (no second DNS round-trip,
+					// which could rebind), trying each in turn so an unreachable
+					// address on a dual-stack host falls back to the next.
+					dialer := &net.Dialer{Timeout: 10 * time.Second}
+					var dialErr error
+					for _, ipStr := range validated {
+						conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ipStr, port))
+						if err == nil {
+							return conn, nil
+						}
+						dialErr = err
+					}
+					return nil, dialErr
 				},
 			},
 			// Re-validate each redirect hop at the URL level (scheme check).

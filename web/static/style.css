@@ -275,7 +275,6 @@ a:hover { color: #ff738f; text-decoration: none; }
 .readme-empty { color: var(--text-muted); }
 /* When README has no headings: hide sidebar, let readme fill full row */
 .readme-full-width { width: 100%; }
-.hidden { display: none !important; }
 
 /* ---------- Prose / legal ---------- */
 .prose { padding: 32px 0 64px; max-width: 80ch; }

@@ -22,5 +22,9 @@ jobs:
 
       - name: Run Gosec
         uses: securego/gosec@v2.27.1
+        env:
+          # The gosec image bundles an older Go (1.26.2) with GOTOOLCHAIN=local;
+          # allow it to fetch the toolchain go.mod requires (>= 1.26.4).
+          GOTOOLCHAIN: auto
         with:
           args: ./...
