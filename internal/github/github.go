@@ -244,7 +244,7 @@ func (c *Client) fetchAllRepos(ctx context.Context) ([]Repo, error) {
 		if err != nil {
 			return nil, err
 		}
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20)) // 8 MiB cap
 		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("github repos: %s: %s", resp.Status, strings.TrimSpace(string(body)))
@@ -285,7 +285,7 @@ func (c *Client) enrichPRCounts(ctx context.Context, repos []Repo) {
 			return
 		}
 
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20)) // 8 MiB cap
 		_ = resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
