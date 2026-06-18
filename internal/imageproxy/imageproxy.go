@@ -126,12 +126,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) fetch(ctx context.Context, u *url.URL) (cachedImage, error) {
+	// #nosec G704 -- u passed validateURLFast (https-only); resolved IPs are re-checked at dial-time
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return cachedImage{}, err
 	}
 	req.Header.Set("User-Agent", "gitindex-imageproxy")
 	req.Header.Set("Accept", "image/*")
+	// #nosec G704 -- request URL validated; transport DialContext re-validates resolved IPs (SSRF/rebind guard)
 	resp, err := h.http.Do(req)
 	if err != nil {
 		return cachedImage{}, err

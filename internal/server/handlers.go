@@ -38,12 +38,12 @@ func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
 
 	readme, err := s.gh.ReadmeHTML(r.Context(), *repo)
 	if err != nil {
-		log.Printf("[warn] readme for %s: %v", repo.Name, err)
+		log.Printf("[warn] readme for %q: %v", repo.Name, err)
 	}
 
 	d := s.base(r)
 	d.Repo = repo
-	d.Readme = template.HTML(readme) //nolint:gosec // sanitized in internal/render
+	d.Readme = template.HTML(readme) // #nosec G203 -- sanitized via bluemonday in internal/render
 	d.ReadmeOK = strings.TrimSpace(readme) != ""
 	d.Canonical = s.cfg.SiteURL + "/repo/" + repo.Slug
 	d.Title = repo.Name + " · " + s.cfg.SiteAuthor
@@ -91,7 +91,7 @@ func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serverError(w http.ResponseWriter, r *http.Request, err error) {
-	log.Printf("[error] %s: %v", r.URL.Path, err)
+	log.Printf("[error] %q: %v", r.URL.Path, err)
 	d := s.base(r)
 	d.Canonical = s.cfg.SiteURL + "/"
 	d.Title = "Error · " + s.cfg.SiteName

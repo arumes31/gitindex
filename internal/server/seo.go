@@ -74,6 +74,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			time.Sleep(3 * time.Second) // wait for server to start serving
 			pingURL := fmt.Sprintf("https://www.bing.com/ping?sitemap=%s", sitemapURL)
+			// #nosec G107 -- fixed bing.com host; only the sitemap query param derives from config
 			resp, err := http.Get(pingURL)
 			if err != nil {
 				log.Printf("[info] automatic sitemap submission to Bing failed: %v", err)

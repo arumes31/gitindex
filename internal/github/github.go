@@ -108,7 +108,7 @@ func (c *Client) StartBackgroundRefresh(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-timer.C:
-				refreshCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+				refreshCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
 				if _, err := c.refreshRepoList(refreshCtx); err != nil {
 					log.Printf("[warn] background repo refresh failed: %v", err)
 				}
