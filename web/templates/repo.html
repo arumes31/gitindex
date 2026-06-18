@@ -1,0 +1,162 @@
+{{template "head" .}}
+<body>
+{{template "header" .}}
+<main id="main" class="wrap">
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/">Projects</a> <span aria-hidden="true">/</span> <span>{{.Repo.Name}}</span>
+  </nav>
+
+  <article class="repo-article">
+    <header class="repo-header">
+      <h1>{{.Repo.Name}}{{if .Repo.Archived}} <span class="badge badge-archived">archived</span>{{end}}</h1>
+      {{if .Repo.Description}}<p class="repo-lead">{{.Repo.Description}}</p>{{end}}
+      <div class="repo-meta repo-meta-lg">
+        {{if .Repo.Language}}<span class="meta-pill">{{.Repo.Language}}</span>{{end}}
+        {{template "stats" .Repo}}
+        {{if .Repo.LicenseName}}<span class="meta-pill">{{.Repo.LicenseName}}</span>{{end}}
+        {{if not .Repo.PushedAt.IsZero}}<span class="meta-pill">Updated {{shortDate .Repo.PushedAt}}</span>{{end}}
+      </div>
+      <div class="repo-actions">
+        <a class="btn btn-primary" href="{{.Repo.HTMLURL}}" rel="noopener noreferrer nofollow" target="_blank">View on GitHub</a>
+        <!-- Download Source ZIP Button (46) -->
+        <a class="btn" href="https://github.com/{{.Cfg.GitHubUser}}/{{.Repo.Name}}/archive/refs/heads/{{.Repo.DefaultBranch}}.zip" rel="noopener noreferrer nofollow" target="_blank">Download ZIP</a>
+        {{if .Repo.Homepage}}<a class="btn" href="{{.Repo.Homepage}}" rel="noopener noreferrer nofollow" target="_blank">Homepage</a>{{end}}
+      </div>
+    </header>
+
+    <!-- Two-column structure for Readme & Table of Contents (51) -->
+    <div class="repo-page-container">
+      <section class="readme-section" aria-label="README content">
+        {{if .ReadmeOK}}
+          <div class="markdown-body" id="readme-body">{{.Readme}}</div>
+        {{else}}
+          <p class="readme-empty">This repository has no README to display. Visit it <a href="{{.Repo.HTMLURL}}" rel="noopener noreferrer nofollow" target="_blank">on GitHub</a>.</p>
+        {{end}}
+      </section>
+
+      <!-- Sidebar Table of Contents (51) -->
+      {{if .ReadmeOK}}
+      <aside class="toc-sidebar" aria-label="Table of Contents">
+        <div class="toc-sticky-container">
+          <h3>On This Page</h3>
+          <nav id="toc-nav"></nav>
+        </div>
+      </aside>
+      {{end}}
+    </div>
+  </article>
+</main>
+{{template "footer" .}}
+
+<script nonce="{{.Nonce}}">
+  document.addEventListener('DOMContentLoaded', () => {
+    const readme = document.getElementById('readme-body');
+    
+    if (readme) {
+      // 1. Table of Contents Generation (51)
+      const tocNav = document.getElementById('toc-nav');
+      if (tocNav) {
+        const headings = readme.querySelectorAll('h2, h3');
+        if (headings.length > 0) {
+          const ul = document.createElement('ul');
+          headings.forEach((heading, idx) => {
+            // Ensure heading has an ID for anchor linking
+            if (!heading.id) {
+              heading.id = 'heading-' + idx;
+            }
+            
+            const li = document.createElement('li');
+            li.className = 'toc-item ' + heading.tagName.toLowerCase();
+            
+            const a = document.createElement('a');
+            a.href = '#' + heading.id;
+            a.textContent = heading.textContent;
+            a.className = 'toc-link';
+            
+            li.appendChild(a);
+            ul.appendChild(li);
+          });
+          tocNav.appendChild(ul);
+        } else {
+          // If no headings, hide sidetoc
+          const sidetoc = document.querySelector('.toc-sidebar');
+          if (sidetoc) sidetoc.style.display = 'none';
+          document.querySelector('.readme-section').style.width = '100%';
+        }
+      }
+
+      // 2. Image Lightbox (54)
+      const lightbox = document.getElementById('lightbox');
+      const lightboxImg = document.getElementById('lightbox-img');
+      const lightboxClose = document.querySelector('.lightbox-close');
+
+      if (lightbox && lightboxImg) {
+        const images = readme.querySelectorAll('img');
+        images.forEach(img => {
+          img.classList.add('lightbox-trigger');
+          img.addEventListener('click', () => {
+            lightboxImg.src = img.src;
+            lightboxImg.alt = img.alt || 'Enlarged README image';
+            lightbox.classList.remove('hidden');
+            lightbox.setAttribute('aria-hidden', 'false');
+          });
+        });
+
+        const closeLightbox = () => {
+          lightbox.classList.add('hidden');
+          lightbox.setAttribute('aria-hidden', 'true');
+        };
+
+        if (lightboxClose) lightboxClose.addEventListener('click', closeLightbox);
+        lightbox.addEventListener('click', (e) => {
+          if (e.target !== lightboxImg && e.target !== lightboxClose) {
+            closeLightbox();
+          }
+        });
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') closeLightbox();
+        });
+      }
+
+      // 3. Copy Code Buttons with Success Transitions (29)
+      const preBlocks = readme.querySelectorAll('pre');
+      preBlocks.forEach((pre) => {
+        // Create pre wrapper
+        const wrapper = document.createElement('div');
+        wrapper.className = 'code-block-wrapper';
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(pre);
+
+        // Create copy button
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.innerHTML = '📋';
+        copyBtn.title = 'Copy code';
+        copyBtn.setAttribute('aria-label', 'Copy code');
+
+        wrapper.appendChild(copyBtn);
+
+        copyBtn.addEventListener('click', () => {
+          const code = pre.querySelector('code') || pre;
+          const textToCopy = code.innerText;
+
+          navigator.clipboard.writeText(textToCopy).then(() => {
+            copyBtn.innerHTML = '✓';
+            copyBtn.title = 'Copied!';
+            copyBtn.classList.add('copied');
+            
+            setTimeout(() => {
+              copyBtn.innerHTML = '📋';
+              copyBtn.title = 'Copy code';
+              copyBtn.classList.remove('copied');
+            }, 1500);
+          }).catch(err => {
+            console.error('Clipboard copy failed: ', err);
+          });
+        });
+      });
+    }
+  });
+</script>
+</body>
+</html>

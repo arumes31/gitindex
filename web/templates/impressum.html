@@ -1,0 +1,47 @@
+{{template "head" .}}
+<body>
+{{template "header" .}}
+<main id="main" class="wrap prose">
+  <h1>Impressum</h1>
+  <p class="muted">Legal notice pursuant to § 5 DDG (German Digital Services Act) / § 5 ECG (Austria).</p>
+
+  {{if .ImpressumConfigured}}
+    <h2>Provided by</h2>
+    <address class="impressum">
+      {{.Cfg.Impressum.Name}}<br>
+      {{if .Cfg.Impressum.Address}}{{.Cfg.Impressum.Address}}<br>{{end}}
+    </address>
+
+    <h2>Contact</h2>
+    <p>
+      {{if .Cfg.Impressum.Email}}Email: <a href="mailto:{{.Cfg.Impressum.Email}}">{{.Cfg.Impressum.Email}}</a><br>{{end}}
+      {{if .Cfg.Impressum.Phone}}Phone: {{.Cfg.Impressum.Phone}}<br>{{end}}
+    </p>
+    {{if .Cfg.Impressum.Extra}}<p class="muted">{{.Cfg.Impressum.Extra}}</p>{{end}}
+  {{else}}
+    <div class="notice notice-warn">
+      <p><strong>Impressum not yet configured.</strong> Before publishing this site you must
+      provide the operator's legal details via environment variables
+      (<code>IMPRESSUM_NAME</code>, <code>IMPRESSUM_ADDRESS</code>, <code>IMPRESSUM_EMAIL</code>,
+      <code>IMPRESSUM_PHONE</code>). A complete Impressum is legally required for sites operated
+      from Germany/Austria and is expected by Google for a trustworthy site.</p>
+    </div>
+  {{end}}
+
+  <h2>Liability for content</h2>
+  <p>The contents of this website were created with the greatest possible care. However, we
+  assume no liability for the accuracy, completeness or topicality of the content.</p>
+
+  <h2>Liability for links &amp; mirrored content</h2>
+  <p>This site mirrors publicly available repository descriptions and README files from
+  <a href="https://github.com/{{.Cfg.GitHubUser}}" rel="noopener noreferrer nofollow" target="_blank">github.com/{{.Cfg.GitHubUser}}</a>.
+  External links and mirrored content point to third-party pages over whose content we have no
+  influence. Responsibility for linked content lies with its respective operators.</p>
+
+  <h2>Copyright</h2>
+  <p>Source code and README content remain the property of their respective authors and are
+  subject to the licenses stated in each repository.</p>
+</main>
+{{template "footer" .}}
+</body>
+</html>

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="repository index">
+  <style>
+    rect.bg { fill: #09070a; }
+    rect.border { stroke: rgba(255, 75, 110, 0.25); }
+    g.bars { fill: #ff4b6e; }
+    circle.dot { fill: #d61c3f; }
+    @media (prefers-color-scheme: light) {
+      rect.bg { fill: #ffffff; }
+      rect.border { stroke: rgba(224, 36, 71, 0.25); }
+      g.bars { fill: #e02447; }
+      circle.dot { fill: #ff4b6e; }
+    }
+  </style>
+  <rect class="bg" width="64" height="64" rx="14"/>
+  <rect class="border" x="6" y="6" width="52" height="52" rx="11" fill="none" stroke-width="2"/>
+  <g class="bars">
+    <rect x="16" y="18" width="32" height="5" rx="2.5"/>
+    <rect x="16" y="29.5" width="24" height="5" rx="2.5"/>
+    <rect x="16" y="41" width="28" height="5" rx="2.5"/>
+  </g>
+  <circle class="dot" cx="48" cy="44" r="3"/>
+</svg>

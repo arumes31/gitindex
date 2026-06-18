@@ -1,0 +1,152 @@
+{{template "head" .}}
+<body>
+{{template "header" .}}
+<main id="main" class="wrap">
+  <section class="hero">
+    <h1>Open source projects by {{.Cfg.SiteAuthor}}</h1>
+    {{if .Cfg.SiteTagline}}<p class="hero-tagline">{{.Cfg.SiteTagline}}</p>{{end}}
+    <p class="hero-meta">{{len .Repos}} public repositories · live mirror of <a href="https://github.com/{{.Cfg.GitHubUser}}" rel="noopener noreferrer nofollow" target="_blank">github.com/{{.Cfg.GitHubUser}}</a></p>
+    {{if and (eq (len .Repos) 0) (not .RepoListReady)}}<p class="notice">Repository cache is warming up. Projects will appear here after the background refresh finishes.</p>{{end}}
+  </section>
+
+  <!-- Search and View Controls (1, 20) -->
+  <div class="control-panel">
+    <div class="search-wrapper">
+      <input type="text" id="search-input" placeholder="Search projects by name, description, or language..." aria-label="Search repositories">
+    </div>
+    <div class="layout-controls">
+      <button id="btn-grid" class="btn btn-icon active" title="Grid view" aria-label="Grid view">⊞</button>
+      <button id="btn-list" class="btn btn-icon" title="List view" aria-label="List view">☰</button>
+    </div>
+  </div>
+
+  <section aria-label="Repositories">
+    <!-- Skeleton Loaders (19) -->
+    {{if and (eq (len .Repos) 0) (not .RepoListReady)}}
+    <ul class="repo-grid skeleton-grid">
+      <li class="repo-card skeleton"><div class="skeleton-line title"></div><div class="skeleton-line desc"></div><div class="skeleton-line meta"></div></li>
+      <li class="repo-card skeleton"><div class="skeleton-line title"></div><div class="skeleton-line desc"></div><div class="skeleton-line meta"></div></li>
+      <li class="repo-card skeleton"><div class="skeleton-line title"></div><div class="skeleton-line desc"></div><div class="skeleton-line meta"></div></li>
+      <li class="repo-card skeleton"><div class="skeleton-line title"></div><div class="skeleton-line desc"></div><div class="skeleton-line meta"></div></li>
+      <li class="repo-card skeleton"><div class="skeleton-line title"></div><div class="skeleton-line desc"></div><div class="skeleton-line meta"></div></li>
+      <li class="repo-card skeleton"><div class="skeleton-line title"></div><div class="skeleton-line desc"></div><div class="skeleton-line meta"></div></li>
+    </ul>
+    {{end}}
+
+    <ul class="repo-grid" id="repo-list">
+      {{range .Repos}}
+      <li class="repo-card card-entry" data-name="{{.Name | lower}}" data-desc="{{if .Description}}{{.Description | lower}}{{end}}" data-lang="{{if .Language}}{{.Language | lower}}{{end}}">
+        <a class="repo-card-link" href="/repo/{{.Slug}}">
+          <h2 class="repo-name">{{.Name}}{{if .Archived}} <span class="badge badge-archived">archived</span>{{end}}</h2>
+          {{if .Description}}<p class="repo-desc">{{.Description}}</p>{{end}}
+        </a>
+        <div class="repo-meta">
+          {{if .Language}}<span class="meta-pill">{{.Language}}</span>{{end}}
+          {{template "stats" .}}
+          {{if .LicenseName}}<span class="meta-pill">{{.LicenseName}}</span>{{end}}
+          {{if not .PushedAt.IsZero}}<span class="meta-pill" title="Last push">{{shortDate .PushedAt}}</span>{{end}}
+        </div>
+      </li>
+      {{else}}
+      {{if .RepoListReady}}<li class="empty" id="empty-state">No repositories found. Check the GitHub user or API rate limit.</li>{{end}}
+      {{end}}
+      <li class="empty hidden" id="search-empty-state">No repositories match your search query.</li>
+    </ul>
+  </section>
+</main>
+{{template "footer" .}}
+
+<script nonce="{{.Nonce}}">
+  // Client-side layout toggling and fuzzy search logic (1, 20)
+  document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('search-input');
+    const repoGrid = document.getElementById('repo-list');
+    const cards = document.querySelectorAll('.card-entry');
+    const emptyState = document.getElementById('search-empty-state');
+    const btnGrid = document.getElementById('btn-grid');
+    const btnList = document.getElementById('btn-list');
+
+    // Restore URL query param search if it exists
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialQuery = urlParams.get('q');
+    if (initialQuery && searchInput) {
+      searchInput.value = initialQuery;
+      filterRepos(initialQuery.toLowerCase());
+    }
+
+    // Live search listener
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        filterRepos(query);
+        
+        // Update URL query param without reloading the page
+        const newUrl = new URL(window.location);
+        if (query) {
+          newUrl.searchParams.set('q', query);
+        } else {
+          newUrl.searchParams.delete('q');
+        }
+        window.history.replaceState({}, '', newUrl);
+      });
+    }
+
+    function filterRepos(query) {
+      let visibleCount = 0;
+      cards.forEach(card => {
+        const name = card.getAttribute('data-name') || '';
+        const desc = card.getAttribute('data-desc') || '';
+        const lang = card.getAttribute('data-lang') || '';
+        
+        if (name.includes(query) || desc.includes(query) || lang.includes(query)) {
+          card.classList.remove('hidden');
+          visibleCount++;
+        } else {
+          card.classList.add('hidden');
+        }
+      });
+
+      if (emptyState) {
+        if (visibleCount === 0 && cards.length > 0) {
+          emptyState.classList.remove('hidden');
+        } else {
+          emptyState.classList.add('hidden');
+        }
+      }
+    }
+
+    // Grid/List toggle logic
+    if (btnGrid && btnList && repoGrid) {
+      // Load preference
+      const savedLayout = localStorage.getItem('layout-preference');
+      if (savedLayout === 'list') {
+        applyListLayout();
+      }
+
+      btnGrid.addEventListener('click', applyGridLayout);
+      btnList.addEventListener('click', applyListLayout);
+    }
+
+    function applyGridLayout() {
+      repoGrid.classList.remove('layout-list');
+      btnGrid.classList.add('active');
+      btnList.classList.remove('active');
+      localStorage.setItem('layout-preference', 'grid');
+    }
+
+    function applyListLayout() {
+      repoGrid.classList.add('layout-list');
+      btnGrid.classList.remove('active');
+      btnList.classList.add('active');
+      localStorage.setItem('layout-preference', 'list');
+    }
+
+    // Staggered Entrance Animation (24)
+    cards.forEach((card, index) => {
+      card.style.animationDelay = `${index * 50}ms`;
+      card.classList.add('animate-in');
+    });
+  });
+</script>
+</body>
+</html>

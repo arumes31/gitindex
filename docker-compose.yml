@@ -1,0 +1,92 @@
+# Every setting is configurable right here. Each value uses ${VAR:-default}
+# interpolation, so you can:
+#   * edit the defaults inline in this file, or
+#   * override any value via a .env file in this directory (Compose loads it
+#     automatically), or
+#   * override via shell environment variables.
+# Nothing else is required to run: `docker compose up -d --build`.
+
+services:
+  app:
+    build: .
+    image: ${IMAGE_NAME:-gitindex:latest}
+    restart: unless-stopped
+    ports:
+      # Empty host port publishes a random available host port.
+      # Set APP_PORT=6541 to pin the host port back to 6541.
+      - "${APP_PORT:-}:${PORT:-6541}"
+    environment:
+      # ---- App ----
+      PORT: "${PORT:-6541}"
+
+      # ---- GitHub source ----
+      GITHUB_USER: "${GITHUB_USER:-arumes31}"
+      # Strongly recommended: raises API limit 60/h -> 5000/h.
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+      INCLUDE_FORKS: "${INCLUDE_FORKS:-false}"
+      INCLUDE_ARCHIVED: "${INCLUDE_ARCHIVED:-false}"
+
+      # ---- Cache TTLs (Go duration syntax; README and repo list default to 24h) ----
+      README_TTL: "${README_TTL:-24h}"
+      REPO_LIST_TTL: "${REPO_LIST_TTL:-24h}"
+      IMAGE_TTL: "${IMAGE_TTL:-24h}"
+
+      # ---- Redis connection (defaults point at the bundled service) ----
+      REDIS_ADDR: "${REDIS_ADDR:-redis:6379}"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+      REDIS_DB: "${REDIS_DB:-0}"
+
+      # ---- Proxy / rate limiting ----
+      RATE_LIMIT_ENABLED: "${RATE_LIMIT_ENABLED:-true}"
+      RATE_LIMIT_WINDOW: "${RATE_LIMIT_WINDOW:-1m}"
+      RATE_LIMIT_REQUESTS: "${RATE_LIMIT_REQUESTS:-120}"
+      TRUST_PROXY: "${TRUST_PROXY:-true}"
+
+      # ---- SEO / site identity ----
+      SITE_URL: "${SITE_URL:-http://localhost:6541}"
+      SITE_NAME: "${SITE_NAME:-arumes31 · Open Source Projects}"
+      SITE_TAGLINE: "${SITE_TAGLINE:-}"
+      SITE_AUTHOR: "${SITE_AUTHOR:-arumes31}"
+      SITE_LOCALE: "${SITE_LOCALE:-en_US}"
+
+      # ---- Impressum (legal notice) — fill in before publishing ----
+      IMPRESSUM_NAME: "${IMPRESSUM_NAME:-}"
+      IMPRESSUM_ADDRESS: "${IMPRESSUM_ADDRESS:-}"
+      IMPRESSUM_EMAIL: "${IMPRESSUM_EMAIL:-}"
+      IMPRESSUM_PHONE: "${IMPRESSUM_PHONE:-}"
+      IMPRESSUM_EXTRA: "${IMPRESSUM_EXTRA:-}"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # distroless has no shell/curl, so use the binary's own probe.
+      test: ["CMD", "/app/gitindex", "-healthcheck"]
+      interval: "${HEALTHCHECK_INTERVAL:-30s}"
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    restart: unless-stopped
+    # README cache lives here. Tunable persistence + memory bounds.
+    # NOTE: the bundled Redis is only reachable on the internal Compose network
+    # and runs without a password. If you set REDIS_PASSWORD above to secure it,
+    # also add `--requirepass ${REDIS_PASSWORD}` here and `-a $REDIS_PASSWORD`
+    # to the healthcheck below, or point REDIS_ADDR at an external Redis instead.
+    command: >
+      redis-server
+      --save ${REDIS_SAVE:-60 1}
+      --appendonly ${REDIS_APPENDONLY:-yes}
+      --maxmemory ${REDIS_MAXMEMORY:-256mb}
+      --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:

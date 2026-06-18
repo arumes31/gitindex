@@ -1,0 +1,217 @@
+{{define "head"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<meta name="description" content="{{.Description}}">
+<link rel="canonical" href="{{.Canonical}}">
+{{if .NoIndex}}<meta name="robots" content="noindex, nofollow">{{else}}<meta name="robots" content="index, follow, max-image-preview:large">{{end}}
+<meta name="author" content="{{.Cfg.SiteAuthor}}">
+<meta name="theme-color" content="#0d1117">
+<meta property="og:type" content="{{if .Repo}}article{{else}}website{{end}}">
+<meta property="og:site_name" content="{{.Cfg.SiteName}}">
+<meta property="og:title" content="{{.Title}}">
+<meta property="og:description" content="{{.Description}}">
+<meta property="og:url" content="{{.Canonical}}">
+<meta property="og:locale" content="{{.Cfg.SiteLocale}}">
+<meta property="og:image" content="{{.OGImage}}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{{.Title}}">
+<meta name="twitter:description" content="{{.Description}}">
+<meta name="twitter:image" content="{{.OGImage}}">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css">
+{{.JSONLD}}
+</head>
+{{end}}
+
+{{define "header"}}
+<canvas id="node-garden"></canvas>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/">
+      <img class="brand-avatar" src="/img?u=https%3A%2F%2Fgithub.com%2F{{.Cfg.GitHubUser}}.png" width="36" height="36" alt="" loading="eager">
+      <span class="brand-text">{{.Cfg.SiteAuthor}}</span>
+    </a>
+    <nav class="site-nav" aria-label="Primary">
+      <a href="/">Projects</a>
+      <a href="https://github.com/{{.Cfg.GitHubUser}}" rel="noopener noreferrer nofollow" target="_blank">GitHub</a>
+    </nav>
+  </div>
+</header>
+{{end}}
+
+{{define "stats"}}
+<span class="meta-pill" title="Stars">★ <span class="stat-count">{{.Stars}}</span></span>
+<span class="meta-pill" title="Forks">⑂ <span class="stat-count">{{.Forks}}</span></span>
+<span class="meta-pill" title="Open issues">⊙ <span class="stat-count">{{.OpenIssuesOnly}}</span> issues</span>
+<span class="meta-pill" title="Open pull requests">⇄ <span class="stat-count">{{.OpenPRs}}</span> PRs</span>
+{{end}}
+
+{{define "footer"}}
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    {{if .Cfg.SiteTagline}}<p class="footer-tagline">{{.Cfg.SiteTagline}}</p>{{end}}
+    <nav class="footer-nav" aria-label="Legal">
+      <a href="/">Projects</a>
+      <a href="/impressum">Impressum</a>
+      <a href="/datenschutz">Privacy</a>
+      <a href="/sitemap.xml">Sitemap</a>
+      <a href="https://github.com/{{.Cfg.GitHubUser}}" rel="noopener noreferrer nofollow" target="_blank">GitHub profile</a>
+    </nav>
+    <p class="footer-copy">© {{.Year}} {{.Cfg.SiteAuthor}}. Project descriptions and READMEs are mirrored from public GitHub repositories.</p>
+  </div>
+</footer>
+
+<!-- Lightbox Modal (54) -->
+<div id="lightbox" class="lightbox hidden" aria-hidden="true" role="dialog">
+  <span class="lightbox-close" title="Close image" aria-label="Close image">&times;</span>
+  <img class="lightbox-content" id="lightbox-img" alt="Enlarged screenshot">
+</div>
+
+<!-- Back to Top Button (56) -->
+<button id="back-to-top" class="back-to-top hidden" title="Back to top" aria-label="Back to top">↑</button>
+
+<!-- Feedback Widget (48) -->
+<div class="feedback-widget">
+  <button id="feedback-toggle" class="btn feedback-toggle">✉ Feedback</button>
+  <div id="feedback-menu" class="feedback-menu hidden">
+    <form id="feedback-form" onsubmit="event.preventDefault(); submitFeedback();">
+      <h4>Send Feedback</h4>
+      <input type="text" id="feedback-name" placeholder="Name" required>
+      <input type="email" id="feedback-email" placeholder="Mailadresse" required>
+      <textarea id="feedback-text" placeholder="Share your suggestions..." required></textarea>
+      <div class="feedback-captcha-container">
+        <span id="captcha-code" class="feedback-captcha-code"></span>
+        <input type="text" id="feedback-captcha" class="feedback-captcha-input" placeholder="Captcha" required>
+      </div>
+      <div class="feedback-actions">
+        <button type="submit" class="btn btn-primary">Submit</button>
+      </div>
+      <p id="feedback-error" class="feedback-success hidden" style="color: #ff6b87;"></p>
+      <p id="feedback-success" class="feedback-success hidden">✓ Feedback sent! Thank you.</p>
+    </form>
+  </div>
+</div>
+
+<script src="/static/background.js" nonce="{{.Nonce}}"></script>
+
+<script nonce="{{.Nonce}}">
+  // Back to top behavior
+  const btt = document.getElementById('back-to-top');
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 400) {
+      btt.classList.remove('hidden');
+    } else {
+      btt.classList.add('hidden');
+    }
+  });
+  btt.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // Feedback widget behavior
+  const fToggle = document.getElementById('feedback-toggle');
+  const fMenu = document.getElementById('feedback-menu');
+  
+  let currentCaptcha = '';
+  function generateCaptcha() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let result = '';
+    for (let i = 0; i < 4; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    currentCaptcha = result;
+    const codeEl = document.getElementById('captcha-code');
+    if (codeEl) {
+      codeEl.textContent = result;
+    }
+    const inputEl = document.getElementById('feedback-captcha');
+    if (inputEl) {
+      inputEl.value = '';
+    }
+  }
+
+  if (fToggle && fMenu) {
+    fToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isHidden = fMenu.classList.contains('hidden');
+      fMenu.classList.toggle('hidden');
+      if (isHidden) {
+        generateCaptcha();
+      }
+    });
+    document.addEventListener('click', (e) => {
+      if (!fMenu.contains(e.target) && e.target !== fToggle) {
+        fMenu.classList.add('hidden');
+      }
+    });
+  }
+
+  function submitFeedback() {
+    const nameEl = document.getElementById('feedback-name');
+    const emailEl = document.getElementById('feedback-email');
+    const textEl = document.getElementById('feedback-text');
+    const captchaEl = document.getElementById('feedback-captcha');
+    const successEl = document.getElementById('feedback-success');
+    const errorEl = document.getElementById('feedback-error');
+
+    if (!textEl || textEl.value.trim() === '') return;
+
+    if (captchaEl.value.trim().toUpperCase() !== currentCaptcha) {
+      if (errorEl) {
+        errorEl.textContent = '❌ Incorrect Captcha';
+        errorEl.classList.remove('hidden');
+        setTimeout(() => {
+          errorEl.classList.add('hidden');
+        }, 3000);
+      }
+      generateCaptcha();
+      return;
+    }
+    
+    if (successEl) {
+      successEl.classList.remove('hidden');
+      if (nameEl) nameEl.value = '';
+      if (emailEl) emailEl.value = '';
+      textEl.value = '';
+      if (captchaEl) captchaEl.value = '';
+      setTimeout(() => {
+        successEl.classList.add('hidden');
+        if (fMenu) fMenu.classList.add('hidden');
+      }, 2000);
+    }
+    generateCaptcha();
+  }
+
+  // Generate initial captcha on load
+  document.addEventListener('DOMContentLoaded', () => {
+    generateCaptcha();
+  });
+
+  // Animation for statistics counters (26)
+  document.addEventListener('DOMContentLoaded', () => {
+    const counters = document.querySelectorAll('.stat-count');
+    counters.forEach(counter => {
+      const target = parseInt(counter.textContent, 10);
+      if (isNaN(target) || target <= 0) return;
+      
+      let current = 0;
+      const duration = 800; // ms
+      const stepTime = Math.max(Math.floor(duration / target), 15);
+      
+      const timer = setInterval(() => {
+        current += Math.max(Math.ceil(target / (duration / stepTime)), 1);
+        if (current >= target) {
+          counter.textContent = target;
+          clearInterval(timer);
+        } else {
+          counter.textContent = current;
+        }
+      }, stepTime);
+    });
+  });
+</script>
+{{end}}

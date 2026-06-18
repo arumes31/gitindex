@@ -1,0 +1,43 @@
+{{template "head" .}}
+<body>
+{{template "header" .}}
+<main id="main" class="wrap prose">
+  <h1>Privacy Policy / Datenschutzerklärung</h1>
+  <p class="muted">Information pursuant to Art. 13 GDPR (DSGVO).</p>
+
+  <h2>Controller</h2>
+  {{if .ImpressumConfigured}}
+    <p>{{.Cfg.Impressum.Name}}{{if .Cfg.Impressum.Email}}, <a href="mailto:{{.Cfg.Impressum.Email}}">{{.Cfg.Impressum.Email}}</a>{{end}}.
+    See the <a href="/impressum">Impressum</a> for full details.</p>
+  {{else}}
+    <p>See the <a href="/impressum">Impressum</a> for the responsible party's details.</p>
+  {{end}}
+
+  <h2>What data is processed</h2>
+  <p>This is a static, content-focused website. We do not use tracking cookies, advertising or
+  third-party analytics. No external scripts, fonts or stylesheets are loaded — all assets are
+  served from this domain, so your browser does not contact any third party while you read.</p>
+
+  <h2>Server log files</h2>
+  <p>When you access this site, the hosting infrastructure may automatically process technical
+  data (IP address, date and time, requested URL, referrer, user agent). This processing is based
+  on our legitimate interest (Art. 6 (1)(f) GDPR) in operating and securing the website. Log data
+  is not merged with other data sources.</p>
+
+  <h2>Mirrored images</h2>
+  <p>Images contained in README files (for example badges or screenshots) are fetched by our
+  server and re-served from this domain through an image proxy. Your browser therefore does not
+  connect to GitHub or other image hosts when viewing a project page.</p>
+
+  <h2>External links</h2>
+  <p>Pages contain links to GitHub and project homepages. When you follow such a link, the privacy
+  policy of the respective provider applies. We have no influence over their data processing.</p>
+
+  <h2>Your rights</h2>
+  <p>You have the right to access, rectification, erasure, restriction of processing, data
+  portability, and to object, as well as the right to lodge a complaint with a supervisory
+  authority. To exercise these rights, contact the controller named above.</p>
+</main>
+{{template "footer" .}}
+</body>
+</html>
