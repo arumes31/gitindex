@@ -78,7 +78,7 @@
 <div class="feedback-widget">
   <button id="feedback-toggle" class="btn feedback-toggle">✉ Feedback</button>
   <div id="feedback-menu" class="feedback-menu hidden">
-    <form id="feedback-form" onsubmit="event.preventDefault(); submitFeedback();">
+    <form id="feedback-form">
       <h4>Send Feedback</h4>
       <input type="text" id="feedback-name" placeholder="Name" required>
       <input type="email" id="feedback-email" placeholder="Mailadresse" required>
@@ -147,6 +147,14 @@
       if (!fMenu.contains(e.target) && e.target !== fToggle) {
         fMenu.classList.add('hidden');
       }
+    });
+  }
+
+  const fForm = document.getElementById('feedback-form');
+  if (fForm) {
+    fForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submitFeedback();
     });
   }
 

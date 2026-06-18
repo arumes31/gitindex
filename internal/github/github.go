@@ -172,6 +172,7 @@ func (c *Client) refreshRepoList(ctx context.Context) ([]Repo, error) {
 	if !c.acquireRefreshLock(ctx) {
 		return nil, fmt.Errorf("repo list refresh already running")
 	}
+	defer c.cache.Del(context.Background(), repoListRefreshLock)
 
 	repos, err := c.fetchAllRepos(ctx)
 	if err != nil {
@@ -258,10 +259,70 @@ func (c *Client) fetchAllRepos(ctx context.Context) ([]Repo, error) {
 	return all, nil
 }
 
-// enrichPRCounts populates Repo.OpenPRs for each repo, fetching concurrently in
-// small batches to stay friendly to the API. This is skipped without a token so
-// the unauthenticated 60 requests/hour limit is not consumed by PR probes.
+type searchItem struct {
+	RepositoryURL string `json:"repository_url"`
+}
+
+type searchResponse struct {
+	TotalCount int          `json:"total_count"`
+	Items      []searchItem `json:"items"`
+}
+
+// enrichPRCounts populates Repo.OpenPRs for each repo. It uses the GitHub Search API
+// to fetch all open PRs in a single query (or up to 2 requests for 100+ items), preventing
+// rate limit exhaustion. It falls back to per-repository queries if the Search API fails.
 func (c *Client) enrichPRCounts(ctx context.Context, repos []Repo) {
+	repoPRs := make(map[string]int)
+	username := c.cfg.GitHubUser
+	page := 1
+
+	for {
+		reqUrl := fmt.Sprintf("%s/search/issues?q=user:%s%%20is:open%%20is:pr&per_page=100&page=%d", api, url.QueryEscape(username), page)
+		resp, err := c.do(ctx, reqUrl)
+		if err != nil {
+			log.Printf("[warn] search open PRs failed: %v, falling back to per-repo pulls endpoint", err)
+			c.enrichPRCountsFallback(ctx, repos)
+			return
+		}
+
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("[warn] search open PRs API returned status %s: %s, falling back to per-repo pulls endpoint", resp.Status, string(body))
+			c.enrichPRCountsFallback(ctx, repos)
+			return
+		}
+
+		var sResp searchResponse
+		if err := json.Unmarshal(body, &sResp); err != nil {
+			log.Printf("[warn] unmarshal search open PRs failed: %v, falling back to per-repo pulls endpoint", err)
+			c.enrichPRCountsFallback(ctx, repos)
+			return
+		}
+
+		for _, item := range sResp.Items {
+			parts := strings.Split(item.RepositoryURL, "/")
+			if len(parts) > 0 {
+				repoName := strings.ToLower(parts[len(parts)-1])
+				repoPRs[repoName]++
+			}
+		}
+
+		if len(sResp.Items) < 100 || page*100 >= sResp.TotalCount {
+			break
+		}
+		page++
+	}
+
+	for i := range repos {
+		repos[i].OpenPRs = repoPRs[strings.ToLower(repos[i].Name)]
+	}
+	log.Printf("[info] successfully enriched PR counts for %d repos using Search API", len(repos))
+}
+
+// enrichPRCountsFallback populates Repo.OpenPRs using the token-gated concurrent pulls method
+func (c *Client) enrichPRCountsFallback(ctx context.Context, repos []Repo) {
 	if c.cfg.GitHubToken == "" {
 		log.Printf("[info] skipping open PR enrichment because GITHUB_TOKEN is empty")
 		return
