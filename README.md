@@ -129,7 +129,7 @@ distroless image to the GitHub Container Registry:
 ghcr.io/arumes31/gitindex
 ```
 
-Available tags: `master` (latest from the default branch), `vX.Y.Z` /
+Available tags: `main` (latest from the default branch), `vX.Y.Z` /
 `vX.Y` (releases), and `sha-<commit>` (immutable, for pinning).
 
 ### Option A — `docker run` (app + your own Redis)
@@ -145,7 +145,7 @@ docker run -d --name gitindex \
   -e GITHUB_TOKEN=ghp_xxx \
   -e SITE_URL=https://projects.example.com \
   -e REDIS_ADDR=redis:6379 \
-  ghcr.io/arumes31/gitindex:master
+  ghcr.io/arumes31/gitindex:main
 ```
 
 ### Option B — Compose using the prebuilt image (no local build)
@@ -156,7 +156,7 @@ building from source:
 ```yaml
 services:
   app:
-    image: ghcr.io/arumes31/gitindex:master
+    image: ghcr.io/arumes31/gitindex:main
     restart: unless-stopped
     ports:
       - "6541:6541"
