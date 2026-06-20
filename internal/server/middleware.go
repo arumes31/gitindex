@@ -138,28 +138,41 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 // securityHeaders applies a strict Content-Security-Policy that forbids all
 // third-party resources (no external CSS/JS/fonts/images). The only inline
 // script permitted is the JSON-LD block, allowed via a per-request nonce.
+// CSP is only applied to HTML pages to avoid interfering with native browser
+// stylesheets on XML/JSON/plain-text responses.
 func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		n := newNonce()
-		csp := strings.Join([]string{
-			"default-src 'none'",
-			"img-src 'self' data:",
-			"style-src 'self'",
-			"script-src 'nonce-" + n + "'",
-			"font-src 'self'",
-			"connect-src 'self'",
-			"base-uri 'self'",
-			"form-action 'self'",
-			"frame-ancestors 'none'",
-		}, "; ")
+		path := r.URL.Path
+		isHTML := !strings.HasPrefix(path, "/static/") &&
+			path != "/img" &&
+			path != "/robots.txt" &&
+			path != "/sitemap.xml" &&
+			path != "/healthz"
+
 		h := w.Header()
-		h.Set("Content-Security-Policy", csp)
+		if isHTML {
+			n := newNonce()
+			csp := strings.Join([]string{
+				"default-src 'none'",
+				"img-src 'self' data:",
+				"style-src 'self'",
+				"script-src 'nonce-" + n + "'",
+				"font-src 'self'",
+				"connect-src 'self'",
+				"base-uri 'self'",
+				"form-action 'self'",
+				"frame-ancestors 'none'",
+			}, "; ")
+			h.Set("Content-Security-Policy", csp)
+			ctx := context.WithValue(r.Context(), nonceKey{}, n)
+			r = r.WithContext(ctx)
+		}
+
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
 
-		ctx := context.WithValue(r.Context(), nonceKey{}, n)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r)
 	})
 }
