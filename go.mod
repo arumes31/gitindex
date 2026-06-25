@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/microcosm-cc/bluemonday v1.0.27
-	github.com/redis/go-redis/v9 v9.20.1
+	github.com/redis/go-redis/v9 v9.21.0
 	github.com/yuin/goldmark v1.8.2
 	golang.org/x/net v0.56.0
 )
