@@ -4,6 +4,8 @@ A small, SEO-friendly Go web app that lists **every public repository** of a
 GitHub user and mirrors each repository's **README** on its own page — built to
 be indexed by search engines so the projects are easier to find.
 
+Example: https://gitindex.reitetschlaeger.com/
+
 <!-- Badges -->
 [![Go Build & Test](https://github.com/arumes31/gitindex/actions/workflows/go.yml/badge.svg)](https://github.com/arumes31/gitindex/actions/workflows/go.yml)
 [![Go Linter (golangci-lint)](https://github.com/arumes31/gitindex/actions/workflows/golangci-lint.yml/badge.svg)](https://github.com/arumes31/gitindex/actions/workflows/golangci-lint.yml)
