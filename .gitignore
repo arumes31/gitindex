@@ -3,3 +3,6 @@
 /gitindex.exe
 /out/
 *.log
+graphify-out/
+
+.claudeignore
