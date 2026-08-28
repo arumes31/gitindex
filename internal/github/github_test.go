@@ -1,6 +1,82 @@
 package github
 
-import "testing"
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"gitindex/internal/config"
+)
+
+type memoryCache struct {
+	values map[string][]byte
+}
+
+func (c *memoryCache) GetBytes(_ context.Context, key string) ([]byte, bool) {
+	value, ok := c.values[key]
+	return value, ok
+}
+
+func (c *memoryCache) SetBytes(_ context.Context, key string, value []byte, _ time.Duration) {
+	c.values[key] = append([]byte(nil), value...)
+}
+
+func (c *memoryCache) SetNX(_ context.Context, key, value string, _ time.Duration) (bool, error) {
+	if _, exists := c.values[key]; exists {
+		return false, nil
+	}
+	c.values[key] = []byte(value)
+	return true, nil
+}
+
+func (c *memoryCache) Del(_ context.Context, key string) {
+	delete(c.values, key)
+}
+
+func TestCorruptRepoIndexIsRebuilt(t *testing.T) {
+	t.Parallel()
+
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/users/example/repos":
+			_, _ = w.Write([]byte(`[{"name":"project","stargazers_count":3}]`))
+		case "/search/issues":
+			_, _ = w.Write([]byte(`{"total_count":0,"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer apiServer.Close()
+
+	store := &memoryCache{values: map[string][]byte{repoListCacheKey: []byte("not-json")}}
+	client := &Client{
+		cfg:    config.Config{GitHubUser: "example", RepoListTTL: time.Hour},
+		cache:  store,
+		http:   &http.Client{Timeout: time.Second},
+		apiURL: apiServer.URL,
+	}
+
+	repos, err := client.allRepos(context.Background())
+	if err != nil {
+		t.Fatalf("allRepos() error = %v", err)
+	}
+	if len(repos) != 1 || repos[0].Slug != "project" {
+		t.Fatalf("allRepos() = %#v, want rebuilt project index", repos)
+	}
+	if _, ok := client.cachedRepoList(context.Background(), repoListCacheKey); !ok {
+		t.Fatal("rebuilt repository index was not cached")
+	}
+}
+
+func TestNewClientHasOutboundDeadline(t *testing.T) {
+	t.Parallel()
+	client := New(config.Config{}, nil)
+	if client.http.Timeout != 15*time.Second {
+		t.Fatalf("HTTP timeout = %s, want 15s", client.http.Timeout)
+	}
+}
 
 func TestOpenIssuesOnly(t *testing.T) {
 	tests := []struct {

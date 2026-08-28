@@ -14,7 +14,7 @@ Example: https://gitindex.reitetschlaeger.com/
 [![Secret Scan (Gitleaks)](https://github.com/arumes31/gitindex/actions/workflows/gitsecret.yml/badge.svg)](https://github.com/arumes31/gitindex/actions/workflows/gitsecret.yml)
 [![Build and Push Docker Image](https://github.com/arumes31/gitindex/actions/workflows/ghcr.yml/badge.svg)](https://github.com/arumes31/gitindex/actions/workflows/ghcr.yml)
 
-[![Go Version](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Container](https://img.shields.io/badge/ghcr.io-arumes31%2Fgitindex-2496ED?logo=docker&logoColor=white)](https://github.com/arumes31/gitindex/pkgs/container/gitindex)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -138,7 +138,7 @@ Available tags: `main` (latest from the default branch), `vX.Y.Z` /
 
 ```bash
 # Redis (or point REDIS_ADDR at an existing instance)
-docker run -d --name gitindex-redis redis:7-alpine
+docker run -d --name gitindex-redis redis:8-alpine
 
 docker run -d --name gitindex \
   -p 6541:6541 \
@@ -178,7 +178,7 @@ services:
       start_period: 10s
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: unless-stopped
     command: >
       redis-server --save "60 1" --appendonly yes
@@ -201,10 +201,10 @@ docker compose up -d
 
 ## Local development (without Docker)
 
-Needs Go 1.26+ and a local Redis:
+Needs Go 1.27+ and a local Redis:
 
 ```bash
-docker run -d -p 6379:6379 redis:7-alpine
+docker run -d -p 6379:6379 redis:8-alpine
 
 export REDIS_ADDR=localhost:6379
 export SITE_URL=http://localhost:6541
@@ -289,7 +289,7 @@ so you only set what you want to change.
 | `APP_PORT` | _(random)_ | Host port to publish; set `6541` to pin it |
 | `IMAGE_NAME` | `gitindex:latest` | Local image tag when building |
 | `HEALTHCHECK_INTERVAL` | `30s` | Container healthcheck interval |
-| `REDIS_IMAGE` | `redis:7-alpine` | Bundled Redis image |
+| `REDIS_IMAGE` | pinned Redis 8 Alpine image | Bundled Redis image |
 | `REDIS_SAVE` | `60 1` | Redis RDB snapshot policy |
 | `REDIS_APPENDONLY` | `yes` | Redis AOF persistence |
 | `REDIS_MAXMEMORY` | `256mb` | Redis memory cap |

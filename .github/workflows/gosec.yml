@@ -6,25 +6,28 @@ on:
   pull_request:
     branches: [ main, master ]
 
+permissions:
+  contents: read
+
 jobs:
   gosec:
     name: Run gosec
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.x'
           cache: true
 
       - name: Run Gosec
-        uses: securego/gosec@v2.27.1
+        uses: securego/gosec@9e6a9843d7a4a6e3e9a8539b02612c8a4aa3f889 # v2.27.1
         env:
-          # The gosec image bundles an older Go (1.26.2) with GOTOOLCHAIN=local;
-          # allow it to fetch the toolchain go.mod requires (>= 1.26.4).
+          # Allow the action to fetch the toolchain required by go.mod.
           GOTOOLCHAIN: auto
         with:
           args: ./...

@@ -1,9 +1,19 @@
 package imageproxy
 
 import (
+	"context"
+	"io"
+	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
 
 // validateURLFast checks scheme and host only; IP validation is in the dialer.
 
@@ -33,6 +43,32 @@ func TestValidateURLFastAcceptsHTTPS(t *testing.T) {
 	if err := validateURLFast(u); err != nil {
 		t.Fatalf("validateURLFast rejected valid HTTPS URL: %v", err)
 	}
+}
+
+func TestFetchRejectsMisleadingContentType(t *testing.T) {
+	handler := &Handler{http: responseClient("text/plain; profile=svg", "not an image")}
+	_, err := handler.fetch(context.Background(), mustParseURL(t, "https://example.com/image"))
+	if err == nil {
+		t.Fatal("fetch accepted a non-image media type containing svg")
+	}
+}
+
+func TestFetchRejectsOversizedImage(t *testing.T) {
+	handler := &Handler{http: responseClient("image/png", strings.Repeat("x", maxImageBytes+1))}
+	_, err := handler.fetch(context.Background(), mustParseURL(t, "https://example.com/image.png"))
+	if err == nil {
+		t.Fatal("fetch accepted an image larger than the configured limit")
+	}
+}
+
+func responseClient(contentType, body string) *http.Client {
+	return &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{contentType}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}, nil
+	})}
 }
 
 // IP-level SSRF blocking is now enforced by the custom DialContext.

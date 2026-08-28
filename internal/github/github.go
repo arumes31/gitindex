@@ -74,16 +74,25 @@ func (r Repo) OpenIssuesOnly() int {
 }
 
 type Client struct {
-	cfg   config.Config
-	cache *cache.Cache
-	http  *http.Client
+	cfg    config.Config
+	cache  cacheStore
+	http   *http.Client
+	apiURL string
+}
+
+type cacheStore interface {
+	GetBytes(context.Context, string) ([]byte, bool)
+	SetBytes(context.Context, string, []byte, time.Duration)
+	SetNX(context.Context, string, string, time.Duration) (bool, error)
+	Del(context.Context, string)
 }
 
 func New(cfg config.Config, c *cache.Cache) *Client {
 	return &Client{
-		cfg:   cfg,
-		cache: c,
-		http:  &http.Client{Timeout: 15 * time.Second},
+		cfg:    cfg,
+		cache:  c,
+		http:   &http.Client{Timeout: 15 * time.Second},
+		apiURL: api,
 	}
 }
 
@@ -238,7 +247,7 @@ func (c *Client) Repos(ctx context.Context) ([]Repo, error) {
 
 func (c *Client) fetchAllRepos(ctx context.Context) ([]Repo, error) {
 	var all []Repo
-	url := fmt.Sprintf("%s/users/%s/repos?per_page=100&sort=updated", api, c.cfg.GitHubUser)
+	url := fmt.Sprintf("%s/users/%s/repos?per_page=100&sort=updated", c.apiURL, c.cfg.GitHubUser)
 	for url != "" {
 		resp, err := c.do(ctx, url)
 		if err != nil {
@@ -277,7 +286,7 @@ func (c *Client) enrichPRCounts(ctx context.Context, repos []Repo) {
 	page := 1
 
 	for {
-		reqUrl := fmt.Sprintf("%s/search/issues?q=user:%s%%20is:open%%20is:pr&per_page=100&page=%d", api, url.QueryEscape(username), page)
+		reqUrl := fmt.Sprintf("%s/search/issues?q=user:%s%%20is:open%%20is:pr&per_page=100&page=%d", c.apiURL, url.QueryEscape(username), page)
 		resp, err := c.do(ctx, reqUrl)
 		if err != nil {
 			log.Printf("[warn] search open PRs failed: %v, falling back to per-repo pulls endpoint", err)
@@ -352,7 +361,7 @@ func (c *Client) enrichPRCountsFallback(ctx context.Context, repos []Repo) {
 // single-item page and reads the count from the rel="last" pagination link,
 // avoiding the need to download every PR.
 func (c *Client) openPRCount(ctx context.Context, repo string) (int, error) {
-	resp, err := c.do(ctx, fmt.Sprintf("%s/repos/%s/%s/pulls?state=open&per_page=1", api, c.cfg.GitHubUser, repo))
+	resp, err := c.do(ctx, fmt.Sprintf("%s/repos/%s/%s/pulls?state=open&per_page=1", c.apiURL, c.cfg.GitHubUser, repo))
 	if err != nil {
 		return 0, err
 	}
@@ -409,7 +418,7 @@ func (c *Client) ReadmeHTML(ctx context.Context, r Repo) (string, error) {
 }
 
 func (c *Client) fetchReadmeMarkdown(ctx context.Context, repo string) (string, error) {
-	resp, err := c.do(ctx, fmt.Sprintf("%s/repos/%s/%s/readme", api, c.cfg.GitHubUser, repo))
+	resp, err := c.do(ctx, fmt.Sprintf("%s/repos/%s/%s/readme", c.apiURL, c.cfg.GitHubUser, repo))
 	if err != nil {
 		return "", err
 	}
