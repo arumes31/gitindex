@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -56,8 +57,7 @@ func New(c *cache.Cache, ttl time.Duration) *Handler {
 						if ip == nil {
 							continue
 						}
-						if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-							ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+						if !ip.IsGlobalUnicast() || ip.IsPrivate() {
 							return nil, fmt.Errorf("target address %s not allowed", ipStr)
 						}
 						validated = append(validated, ipStr)
@@ -144,13 +144,16 @@ func (h *Handler) fetch(ctx context.Context, u *url.URL) (cachedImage, error) {
 	if resp.StatusCode != http.StatusOK {
 		return cachedImage{}, fmt.Errorf("status %d", resp.StatusCode)
 	}
-	ct := resp.Header.Get("Content-Type")
-	if !strings.HasPrefix(ct, "image/") && !strings.Contains(ct, "svg") {
-		return cachedImage{}, fmt.Errorf("not an image: %q", ct)
+	ct, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if err != nil || !strings.HasPrefix(ct, "image/") {
+		return cachedImage{}, fmt.Errorf("not an image: %q", resp.Header.Get("Content-Type"))
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes+1))
 	if err != nil {
 		return cachedImage{}, err
+	}
+	if len(data) > maxImageBytes {
+		return cachedImage{}, fmt.Errorf("image exceeds %d-byte limit", maxImageBytes)
 	}
 	return cachedImage{contentType: ct, data: data}, nil
 }

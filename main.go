@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"gitindex/internal/cache"
@@ -49,9 +52,29 @@ func main() {
 		Addr:              ":" + cfg.Port,
 		Handler:           srv.Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 	log.Printf("gitindex listening on :%s (user: %s, readmeTTL: %s, repoListTTL: %s, rateLimit: %t/%d per %s, trustProxy: %t)", cfg.Port, cfg.GitHubUser, cfg.ReadmeTTL, cfg.RepoListTTL, cfg.RateLimitEnabled, cfg.RateLimitRequests, cfg.RateLimitWindow, cfg.TrustProxy)
-	log.Fatal(httpSrv.ListenAndServe())
+
+	shutdownCtx, shutdownSignal := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer shutdownSignal()
+	go func() {
+		<-shutdownCtx.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := httpSrv.Shutdown(ctx); err != nil {
+			log.Printf("[error] graceful shutdown: %v", err)
+		}
+	}()
+
+	if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatalf("http server: %v", err)
+	}
+	if err := c.Close(); err != nil {
+		log.Printf("[warn] closing redis client: %v", err)
+	}
 }
 
 // runHealthcheck is used by the container HEALTHCHECK in a distroless image that

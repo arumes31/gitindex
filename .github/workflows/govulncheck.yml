@@ -8,22 +8,26 @@ on:
   schedule:
     - cron: '0 12 * * 1'
 
+permissions:
+  contents: read
+
 jobs:
   vulncheck:
     name: Govulncheck
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.x'
           cache: true
 
       - name: Run Govulncheck
-        uses: golang/govulncheck-action@v1
+        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1
         with:
-          go-version-input: '1.26.5'
+          go-version-input: '1.27.x'
           go-package: ./...
