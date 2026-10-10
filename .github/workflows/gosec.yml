@@ -17,11 +17,11 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.26.9'
           cache: true
 
       - name: Run Gosec
-        uses: securego/gosec@v2.27.1
+        uses: securego/gosec@7b1b5cebe007d62fb58eacb90fc571112939ec30 # Go 1.27.2 support
         env:
           # The gosec image bundles an older Go (1.26.2) with GOTOOLCHAIN=local;
           # allow it to fetch the toolchain go.mod requires (>= 1.26.4).
