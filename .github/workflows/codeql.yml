@@ -35,6 +35,7 @@ jobs:
       - uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'go' && 'manual' || 'none' }}
       - name: Build Go packages
         if: matrix.language == 'go'
         run: |
