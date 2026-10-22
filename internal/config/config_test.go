@@ -14,6 +14,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("RATE_LIMIT_WINDOW", "")
 	t.Setenv("RATE_LIMIT_REQUESTS", "")
 	t.Setenv("TRUST_PROXY", "")
+	t.Setenv("TRUSTED_PROXIES", "")
 	t.Setenv("README_TTL", "")
 	t.Setenv("REPO_LIST_TTL", "")
 	t.Setenv("IMAGE_TTL", "")
@@ -34,6 +35,9 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.TrustProxy != true {
 		t.Fatalf("TrustProxy = %v, want true", cfg.TrustProxy)
+	}
+	if len(cfg.TrustedProxies) != 6 {
+		t.Fatalf("TrustedProxies = %v, want 6 default private ranges", cfg.TrustedProxies)
 	}
 	if cfg.ReadmeTTL != 24*time.Hour {
 		t.Fatalf("ReadmeTTL = %s, want 24h", cfg.ReadmeTTL)
@@ -82,5 +86,18 @@ func TestLoadImpressumConfigured(t *testing.T) {
 	}
 	if cfg.Impressum.Address != "" {
 		t.Fatalf("Impressum.Address = %q, want empty", cfg.Impressum.Address)
+	}
+}
+
+func TestLoadTrustedProxies(t *testing.T) {
+	t.Setenv("TRUSTED_PROXIES", "173.245.48.0/20, 203.0.113.7, bogus")
+
+	cfg := Load()
+
+	if len(cfg.TrustedProxies) != 2 {
+		t.Fatalf("TrustedProxies = %v, want 2 entries", cfg.TrustedProxies)
+	}
+	if got := cfg.TrustedProxies[1].String(); got != "203.0.113.7/32" {
+		t.Fatalf("bare IP parsed as %q, want 203.0.113.7/32", got)
 	}
 }

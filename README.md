@@ -87,7 +87,7 @@ Code is split into small packages (no monolith):
 |--------|------|---------|
 | `GET` | `/` | Repository index |
 | `GET` | `/repo/{name}` | A single repo with its rendered README |
-| `GET` | `/img?u=<url>` | Same-origin, SSRF-guarded image proxy |
+| `GET` | `/img?u=<url>&s=<hmac>` | Same-origin, SSRF-guarded image proxy (signed URLs only) |
 | `GET` | `/impressum` | Legal notice (Impressum) |
 | `GET` | `/datenschutz` | Privacy policy (Datenschutz) |
 | `GET` | `/robots.txt` | Robots policy |
@@ -250,7 +250,7 @@ so you only set what you want to change.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `REDIS_ADDR` | `redis:6379` | Redis host:port |
-| `REDIS_PASSWORD` | _(empty)_ | Redis password, if any |
+| `REDIS_PASSWORD` | _(empty)_ | Redis password. Recommended; with Compose it also enables `requirepass` on the bundled Redis |
 | `REDIS_DB` | `0` | Redis database number |
 
 ### Rate limiting & proxy
@@ -260,7 +260,14 @@ so you only set what you want to change.
 | `RATE_LIMIT_ENABLED` | `true` | Enable per-IP rate limiting |
 | `RATE_LIMIT_WINDOW` | `1m` | Sliding window duration |
 | `RATE_LIMIT_REQUESTS` | `120` | Allowed requests per window |
-| `TRUST_PROXY` | `true` | Honor `X-Forwarded-For` for client IP (set behind a reverse proxy only) |
+| `TRUST_PROXY` | `true` | Honor `CF-Connecting-IP` / `X-Forwarded-For` / `X-Real-IP` for the client IP, but only from `TRUSTED_PROXIES` |
+| `TRUSTED_PROXIES` | loopback + RFC1918 + `fc00::/7` | Comma-separated CIDRs/IPs whose forwarding headers are trusted. Requests from any other peer are keyed by their socket address. Add your CDN's ranges (e.g. Cloudflare) if it connects to the app directly |
+
+### Image proxy
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `IMAGE_PROXY_SECRET` | _(random per start)_ | HMAC secret used to sign `/img` URLs. Set a long random value (e.g. `openssl rand -hex 32`) so proxy and `og:image` URLs stay valid across restarts and replicas |
 
 ### SEO / site identity
 
@@ -287,9 +294,10 @@ so you only set what you want to change.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `APP_PORT` | _(random)_ | Host port to publish; set `6541` to pin it |
+| `APP_BIND` | `0.0.0.0` | Host address to publish on; set `127.0.0.1` behind a local reverse proxy |
 | `IMAGE_NAME` | `gitindex:latest` | Local image tag when building |
 | `HEALTHCHECK_INTERVAL` | `30s` | Container healthcheck interval |
-| `REDIS_IMAGE` | `redis:7-alpine` | Bundled Redis image |
+| `REDIS_IMAGE` | `redis:7-alpine@sha256:…` | Bundled Redis image (pinned by digest) |
 | `REDIS_SAVE` | `60 1` | Redis RDB snapshot policy |
 | `REDIS_APPENDONLY` | `yes` | Redis AOF persistence |
 | `REDIS_MAXMEMORY` | `256mb` | Redis memory cap |
@@ -301,7 +309,8 @@ so you only set what you want to change.
    Canonicals, sitemap and OG tags depend on it.
 2. **Fill in the Impressum** (`IMPRESSUM_*`) — `/impressum` warns until you do.
 3. Serve over **HTTPS** (terminate TLS at your reverse proxy) and keep
-   `TRUST_PROXY=true` so client IPs are read from `X-Forwarded-For`.
+   `TRUST_PROXY=true` so client IPs are read from `X-Forwarded-For`. Make sure
+   the proxy's address is covered by `TRUSTED_PROXIES`.
 4. Submit `https://<your-domain>/sitemap.xml` in **Google Search Console**.
    (Bing receives an automatic one-time ping on startup.)
 5. Validate a repo page with Google's **Rich Results Test** (JSON-LD) and
@@ -313,8 +322,10 @@ so you only set what you want to change.
   runs as `nonroot:nonroot`. The container healthcheck uses the binary's own
   `-healthcheck` probe rather than `curl`.
 - **SSRF-guarded image proxy** — https-only, and resolved IPs are re-validated
-  **at dial-time** (loopback / private / link-local / unspecified ranges are
-  rejected), closing the DNS-rebinding window.
+  **at dial-time** (loopback / private / link-local / CGNAT / NAT64 / reserved
+  ranges are rejected), closing the DNS-rebinding window. Proxy URLs are
+  HMAC-signed, so only images the site links to can be fetched. Only image
+  types are served, with a normalized `Content-Type` and a sandboxing CSP.
 - **Strict CSP** — `default-src 'none'` plus a per-request nonce; no third-party
   origins are ever contacted by the browser.
 - **Per-IP rate limiting** and standard security headers on every response.
