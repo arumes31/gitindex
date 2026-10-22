@@ -14,7 +14,9 @@ services:
     ports:
       # Empty host port publishes a random available host port.
       # Set APP_PORT=6541 to pin the host port back to 6541.
-      - "${APP_PORT:-}:${PORT:-6541}"
+      # Set APP_BIND=127.0.0.1 when a reverse proxy on this host fronts the app,
+      # so it is not reachable directly from other machines.
+      - "${APP_BIND:-0.0.0.0}:${APP_PORT:-}:${PORT:-6541}"
     environment:
       # ---- App ----
       PORT: "${PORT:-6541}"
@@ -32,6 +34,7 @@ services:
       IMAGE_TTL: "${IMAGE_TTL:-24h}"
 
       # ---- Redis connection (defaults point at the bundled service) ----
+      # Setting REDIS_PASSWORD also enables `requirepass` on the bundled Redis.
       REDIS_ADDR: "${REDIS_ADDR:-redis:6379}"
       REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
       REDIS_DB: "${REDIS_DB:-0}"
@@ -41,6 +44,14 @@ services:
       RATE_LIMIT_WINDOW: "${RATE_LIMIT_WINDOW:-1m}"
       RATE_LIMIT_REQUESTS: "${RATE_LIMIT_REQUESTS:-120}"
       TRUST_PROXY: "${TRUST_PROXY:-true}"
+      # Forwarding headers are only honored from these peers (comma-separated
+      # CIDRs). Add your CDN's ranges (e.g. Cloudflare) if it connects directly.
+      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}"
+
+      # ---- Image proxy ----
+      # HMAC secret for /img URLs. Empty = random per start (URLs change on
+      # restart). Set a long random value for stable og:image URLs.
+      IMAGE_PROXY_SECRET: "${IMAGE_PROXY_SECRET:-}"
 
       # ---- SEO / site identity ----
       SITE_URL: "${SITE_URL:-http://localhost:6541}"
@@ -67,23 +78,32 @@ services:
       start_period: 10s
 
   redis:
-    image: ${REDIS_IMAGE:-redis:7-alpine}
+    # Pinned by digest for reproducible deploys; Dependabot does not track
+    # Compose files, so bump the tag and digest together when updating.
+    image: ${REDIS_IMAGE:-redis:7-alpine@sha256:892022f9f18c26c92c30e15194d132f90044af87b94a491a75429bbc3982eab1}
     restart: unless-stopped
     # README cache lives here. Tunable persistence + memory bounds.
-    # NOTE: the bundled Redis is only reachable on the internal Compose network
-    # and runs without a password. If you set REDIS_PASSWORD above to secure it,
-    # also add `--requirepass ${REDIS_PASSWORD}` here and `-a $REDIS_PASSWORD`
-    # to the healthcheck below, or point REDIS_ADDR at an external Redis instead.
-    command: >
-      redis-server
-      --save ${REDIS_SAVE:-60 1}
-      --appendonly ${REDIS_APPENDONLY:-yes}
-      --maxmemory ${REDIS_MAXMEMORY:-256mb}
-      --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+    # The bundled Redis is only reachable on the internal Compose network.
+    # Setting REDIS_PASSWORD (recommended) enables `requirepass`, so other
+    # containers on the network cannot read or poison the cache.
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+    # $$ defers expansion to the container shell, which adds --requirepass
+    # only when REDIS_PASSWORD is non-empty.
+    command:
+      - sh
+      - -c
+      - >-
+        exec redis-server
+        --save ${REDIS_SAVE:-60 1}
+        --appendonly ${REDIS_APPENDONLY:-yes}
+        --maxmemory ${REDIS_MAXMEMORY:-256mb}
+        --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+        $${REDIS_PASSWORD:+--requirepass "$$REDIS_PASSWORD"}
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "[ -z \"$$REDIS_PASSWORD\" ] || export REDISCLI_AUTH=\"$$REDIS_PASSWORD\"; redis-cli ping | grep -q PONG"]
       interval: 10s
       timeout: 3s
       retries: 5
