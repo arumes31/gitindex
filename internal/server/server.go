@@ -4,11 +4,11 @@
 package server
 
 import (
+	"crypto/rand"
 	"html/template"
 	"io/fs"
 	"log"
 	"net/http"
-	"net/url"
 	"time"
 
 	"gitindex/internal/cache"
@@ -22,16 +22,27 @@ type Server struct {
 	gh       *github.Client
 	cache    *cache.Cache
 	limiter  *rateLimiter
+	images   *imageproxy.Handler
 	tpl      *template.Template
 	staticFS fs.FS
 }
 
 func New(cfg config.Config, gh *github.Client, c *cache.Cache, tpl *template.Template, staticFS fs.FS) (*Server, error) {
+	key := []byte(cfg.ImageProxySecret)
+	if len(key) == 0 {
+		// No configured secret: use a per-process one. Proxy URLs then change
+		// on restart, which is fine since pages are not shared-cached.
+		key = make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			return nil, err
+		}
+	}
 	return &Server{
-		cfg:     cfg,
-		gh:      gh,
-		cache:   c,
-		limiter: newRateLimiter(cfg.RateLimitWindow, cfg.RateLimitRequests),
+		cfg:      cfg,
+		gh:       gh,
+		cache:    c,
+		limiter:  newRateLimiter(cfg.RateLimitWindow, cfg.RateLimitRequests),
+		images:   imageproxy.New(c, cfg.ImageTTL, key),
 		tpl:      tpl,
 		staticFS: staticFS,
 	}, nil
@@ -42,7 +53,7 @@ func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(s.staticFS))))
-	mux.Handle("GET /img", imageproxy.New(s.cache, s.cfg.ImageTTL))
+	mux.Handle("GET /img", s.images)
 
 	mux.HandleFunc("GET /{$}", s.handleIndex)
 	mux.HandleFunc("GET /repo/{name}", s.handleRepo)
@@ -93,7 +104,7 @@ func (s *Server) base(r *http.Request) pageData {
 		ImpressumConfigured: s.cfg.ImpressumConfigured(),
 		Year:                time.Now().Year(),
 		Nonce:               nonceFrom(r.Context()),
-		OGImage:             s.cfg.SiteURL + "/img?u=" + url.QueryEscape(avatar),
+		OGImage:             s.cfg.SiteURL + s.images.SignURL(avatar),
 	}
 }
 
