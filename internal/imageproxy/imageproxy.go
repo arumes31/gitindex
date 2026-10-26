@@ -3,19 +3,29 @@
 // strict Content-Security-Policy (img-src 'self') can be enforced.
 //
 // Fetched images are cached in Redis. The fetcher is hardened against SSRF:
-// https only, and any address resolving to a private/loopback/link-local IP
-// is refused at TCP dial-time (not just pre-flight) to prevent DNS rebinding.
+// https only, and any address resolving to a non-public IP (private, loopback,
+// link-local, CGNAT, NAT64, documentation, ...) is refused at TCP dial-time
+// (not just pre-flight) to prevent DNS rebinding.
+//
+// Proxy URLs are signed with an HMAC (see SignURL/SignHTML), so only images the
+// site itself links to can be fetched; the proxy is not an open HTTPS fetcher.
+// Only raster image types and SVG are served, with a normalized Content-Type
+// and a sandboxing CSP so an SVG opened directly can never run script.
 package imageproxy
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,16 +34,92 @@ import (
 
 const maxImageBytes = 12 << 20 // 12 MiB
 
+// allowedTypes are the only media types the proxy will serve. Anything else
+// (text/html, application/xml, ...) is rejected so the proxy can never serve an
+// active document on the site origin.
+var allowedTypes = map[string]bool{
+	"image/png":                true,
+	"image/jpeg":               true,
+	"image/gif":                true,
+	"image/webp":               true,
+	"image/avif":               true,
+	"image/bmp":                true,
+	"image/x-icon":             true,
+	"image/vnd.microsoft.icon": true,
+	// SVG is common for README badges. It is served with a sandboxing CSP
+	// (see writeImage), so scripts never run even if it is opened directly.
+	"image/svg+xml": true,
+}
+
+// imageCSP neutralizes any active content in a proxied response that is
+// opened as a top-level document (e.g. an SVG containing <script>).
+const imageCSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+
+// blockedPrefixes are non-public address ranges the proxy must never dial.
+// IPv4-mapped IPv6 addresses are unmapped before the check.
+var blockedPrefixes = func() []netip.Prefix {
+	var out []netip.Prefix
+	for _, s := range []string{
+		"0.0.0.0/8",       // "this" network
+		"10.0.0.0/8",      // RFC1918
+		"100.64.0.0/10",   // CGNAT (RFC6598), e.g. Tailscale
+		"127.0.0.0/8",     // loopback
+		"169.254.0.0/16",  // link-local / cloud metadata
+		"172.16.0.0/12",   // RFC1918
+		"192.0.0.0/24",    // IETF protocol assignments
+		"192.0.2.0/24",    // TEST-NET-1
+		"192.88.99.0/24",  // 6to4 relay anycast
+		"192.168.0.0/16",  // RFC1918
+		"198.18.0.0/15",   // benchmarking
+		"198.51.100.0/24", // TEST-NET-2
+		"203.0.113.0/24",  // TEST-NET-3
+		"224.0.0.0/4",     // multicast
+		"240.0.0.0/4",     // reserved + broadcast
+		"::/128",          // unspecified
+		"::1/128",         // loopback
+		"64:ff9b::/96",    // NAT64 (can map to internal IPv4)
+		"64:ff9b:1::/48",  // local-use NAT64
+		"100::/64",        // discard-only
+		"2001::/23",       // IETF protocol assignments (incl. Teredo)
+		"2001:db8::/32",   // documentation
+		"2002::/16",       // 6to4 (embeds IPv4)
+		"fc00::/7",        // unique local
+		"fe80::/10",       // link-local
+		"ff00::/8",        // multicast
+	} {
+		out = append(out, netip.MustParsePrefix(s))
+	}
+	return out
+}()
+
+// isBlockedIP reports whether ip is outside the public unicast address space.
+func isBlockedIP(ip netip.Addr) bool {
+	ip = ip.Unmap()
+	if !ip.IsValid() {
+		return true
+	}
+	for _, p := range blockedPrefixes {
+		if p.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 type Handler struct {
 	cache *cache.Cache
 	ttl   time.Duration
+	key   []byte
 	http  *http.Client
 }
 
-func New(c *cache.Cache, ttl time.Duration) *Handler {
+// New returns the proxy handler. key is the HMAC secret used to sign and
+// verify proxy URLs; requests are refused while it is empty.
+func New(c *cache.Cache, ttl time.Duration, key []byte) *Handler {
 	return &Handler{
 		cache: c,
 		ttl:   ttl,
+		key:   key,
 		http: &http.Client{
 			Timeout: 12 * time.Second,
 			Transport: &http.Transport{
@@ -52,12 +138,11 @@ func New(c *cache.Cache, ttl time.Duration) *Handler {
 					}
 					var validated []string
 					for _, ipStr := range ips {
-						ip := net.ParseIP(ipStr)
-						if ip == nil {
+						ip, err := netip.ParseAddr(ipStr)
+						if err != nil {
 							continue
 						}
-						if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-							ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+						if isBlockedIP(ip) {
 							return nil, fmt.Errorf("target address %s not allowed", ipStr)
 						}
 						validated = append(validated, ipStr)
@@ -102,13 +187,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing url", http.StatusBadRequest)
 		return
 	}
+	if !h.validSignature(raw, r.URL.Query().Get("s")) {
+		http.Error(w, "invalid signature", http.StatusForbidden)
+		return
+	}
 	u, err := url.Parse(raw)
 	if err != nil || validateURLFast(u) != nil {
 		http.Error(w, "invalid or disallowed url", http.StatusBadRequest)
 		return
 	}
 
-	key := "img:v1:" + hash(raw)
+	// v2: entries store the normalized content-type, not the upstream header.
+	key := "img:v2:" + hash(raw)
 	if b, ok := h.cache.GetBytes(r.Context(), key); ok {
 		if img, ok := decode(b); ok {
 			writeImage(w, img, true)
@@ -144,9 +234,9 @@ func (h *Handler) fetch(ctx context.Context, u *url.URL) (cachedImage, error) {
 	if resp.StatusCode != http.StatusOK {
 		return cachedImage{}, fmt.Errorf("status %d", resp.StatusCode)
 	}
-	ct := resp.Header.Get("Content-Type")
-	if !strings.HasPrefix(ct, "image/") && !strings.Contains(ct, "svg") {
-		return cachedImage{}, fmt.Errorf("not an image: %q", ct)
+	ct, err := normalizeType(resp.Header.Get("Content-Type"))
+	if err != nil {
+		return cachedImage{}, err
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes))
 	if err != nil {
@@ -156,7 +246,14 @@ func (h *Handler) fetch(ctx context.Context, u *url.URL) (cachedImage, error) {
 }
 
 func writeImage(w http.ResponseWriter, img cachedImage, cached bool) {
-	w.Header().Set("Content-Type", img.contentType)
+	ct, err := normalizeType(img.contentType)
+	if err != nil {
+		http.Error(w, "upstream image error", http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Content-Security-Policy", imageCSP)
+	w.Header().Set("Content-Disposition", `inline; filename="img"`)
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if cached {
@@ -165,6 +262,58 @@ func writeImage(w http.ResponseWriter, img cachedImage, cached bool) {
 		w.Header().Set("X-Cache", "MISS")
 	}
 	_, _ = w.Write(img.data)
+}
+
+// normalizeType parses an upstream Content-Type and returns the bare media
+// type if it is on the allowlist. Parameters are dropped so nothing from the
+// upstream header is reflected verbatim.
+func normalizeType(header string) (string, error) {
+	mt, _, err := mime.ParseMediaType(header)
+	if err != nil {
+		return "", fmt.Errorf("bad content-type %q: %w", header, err)
+	}
+	if !allowedTypes[mt] {
+		return "", fmt.Errorf("content-type not allowed: %q", mt)
+	}
+	return mt, nil
+}
+
+// sign returns the hex HMAC-SHA256 of the raw image URL.
+func (h *Handler) sign(raw string) string {
+	m := hmac.New(sha256.New, h.key)
+	_, _ = m.Write([]byte(raw))
+	return hex.EncodeToString(m.Sum(nil))
+}
+
+func (h *Handler) validSignature(raw, sig string) bool {
+	if len(h.key) == 0 || sig == "" {
+		return false
+	}
+	return hmac.Equal([]byte(h.sign(raw)), []byte(sig))
+}
+
+// SignURL returns the signed, root-relative proxy path for an absolute image
+// URL, e.g. "/img?u=https%3A%2F%2F...&s=<hmac>".
+func (h *Handler) SignURL(raw string) string {
+	return "/img?u=" + url.QueryEscape(raw) + "&s=" + h.sign(raw)
+}
+
+// proxySrcRe matches unsigned proxy URLs in sanitized HTML. The u value is
+// query-escaped by render.proxify, so it never contains '"' or '&'.
+var proxySrcRe = regexp.MustCompile(`"/img\?u=([^"&]+)"`)
+
+// SignHTML appends a signature to every unsigned "/img?u=..." attribute value
+// in already-sanitized HTML. Signing at response time (instead of at render
+// time) keeps cached README HTML valid across restarts and secret changes.
+func (h *Handler) SignHTML(s string) string {
+	return proxySrcRe.ReplaceAllStringFunc(s, func(m string) string {
+		esc := proxySrcRe.FindStringSubmatch(m)[1]
+		raw, err := url.QueryUnescape(esc)
+		if err != nil {
+			return m
+		}
+		return `"/img?u=` + esc + `&amp;s=` + h.sign(raw) + `"`
+	})
 }
 
 // validateURLFast performs a fast pre-flight check: https scheme only and

@@ -4,6 +4,8 @@
 //   - Every image — whether written as Markdown (![](…)) or as a raw HTML <img>
 //     tag — is routed through the local /img proxy, so the rendered page loads
 //     no third-party resources (privacy + strict CSP + caching).
+//   - Element ids are prefixed with "user-content-" (as on GitHub) so README
+//     HTML cannot clobber the page's own ids; in-page "#anchor" links follow.
 //   - Output is sanitized with bluemonday before it ever reaches a browser.
 package render
 
@@ -28,7 +30,8 @@ func buildPolicy() *bluemonday.Policy {
 	p := bluemonday.UGCPolicy()
 	p.AllowAttrs("loading", "align", "width", "height").OnElements("img")
 	p.AllowAttrs("align").OnElements("div", "p", "table", "td", "th", "h1", "h2", "h3")
-	p.AllowAttrs("class", "id").Globally()
+	// Only syntax-highlighting hints; README HTML must not reuse site classes.
+	p.AllowAttrs("class").Matching(regexp.MustCompile(`^language-[\w-]+$`)).OnElements("code")
 	p.AllowElements("details", "summary", "del", "ins", "sup", "sub", "kbd")
 	p.AllowAttrs("type", "checked", "disabled").OnElements("input")
 	p.RequireNoFollowOnLinks(true)
@@ -38,6 +41,9 @@ func buildPolicy() *bluemonday.Policy {
 	p.AllowDataURIImages()
 	return p
 }
+
+// idPrefix namespaces README element ids, mirroring GitHub's behavior.
+const idPrefix = "user-content-"
 
 var schemeRe = regexp.MustCompile(`(?i)^(https?:|mailto:|tel:|#|data:|//)`)
 
@@ -71,7 +77,8 @@ func ReadmeHTML(md, user, repo, branch string) string {
 
 // rewriteURLs walks the rendered HTML and:
 //   - resolves relative <img>/<a> URLs against the repo on GitHub, and
-//   - routes every <img> through the same-origin /img proxy.
+//   - routes every <img> through the same-origin /img proxy, and
+//   - prefixes ids (and matching "#anchor" links) with idPrefix.
 func rewriteURLs(htmlStr, rawBase, blobBase string) string {
 	ctx := &html.Node{Type: html.ElementNode, Data: "div", DataAtom: atom.Div}
 	nodes, err := html.ParseFragment(strings.NewReader(htmlStr), ctx)
@@ -82,6 +89,7 @@ func rewriteURLs(htmlStr, rawBase, blobBase string) string {
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode {
+			rewriteAttr(n, "id", prefixID)
 			switch n.DataAtom {
 			case atom.Img:
 				rewriteAttr(n, "src", func(v string) string {
@@ -91,6 +99,9 @@ func rewriteURLs(htmlStr, rawBase, blobBase string) string {
 				removeAttr(n, "srcset")
 			case atom.A:
 				rewriteAttr(n, "href", func(v string) string {
+					if frag, ok := strings.CutPrefix(v, "#"); ok && frag != "" {
+						return "#" + prefixID(frag)
+					}
 					if isRelative(v) {
 						return blobBase + strings.TrimPrefix(v, "./")
 					}
@@ -111,6 +122,13 @@ func rewriteURLs(htmlStr, rawBase, blobBase string) string {
 		_ = html.Render(&out, n)
 	}
 	return out.String()
+}
+
+func prefixID(v string) string {
+	if v == "" || strings.HasPrefix(v, idPrefix) {
+		return v
+	}
+	return idPrefix + v
 }
 
 // resolveImageURL turns a relative or protocol-relative image URL into an

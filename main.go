@@ -49,6 +49,10 @@ func main() {
 		Addr:              ":" + cfg.Port,
 		Handler:           srv.Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second, // fits a 12 MiB proxied image on a slow link
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    64 << 10,
 	}
 	log.Printf("gitindex listening on :%s (user: %s, readmeTTL: %s, repoListTTL: %s, rateLimit: %t/%d per %s, trustProxy: %t)", cfg.Port, cfg.GitHubUser, cfg.ReadmeTTL, cfg.RepoListTTL, cfg.RateLimitEnabled, cfg.RateLimitRequests, cfg.RateLimitWindow, cfg.TrustProxy)
 	log.Fatal(httpSrv.ListenAndServe())
