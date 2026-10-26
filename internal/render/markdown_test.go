@@ -35,3 +35,20 @@ func TestReadmeHTMLProxiesAllImages(t *testing.T) {
 		t.Errorf("found unproxied image src:\n%s", out)
 	}
 }
+
+// README HTML must not reuse site classes or clobber page ids.
+func TestReadmeHTMLRestrictsClassAndID(t *testing.T) {
+	md := "## Install\n\n[jump](#install)\n\n<div class=\"lightbox btn\" id=\"lightbox\">x</div>\n\n```go\nfmt.Println()\n```\n"
+	out := ReadmeHTML(md, "u", "r", "main")
+
+	for _, bad := range []string{`class="lightbox`, `id="lightbox"`, `id="install"`} {
+		if strings.Contains(out, bad) {
+			t.Errorf("output contains %s:\n%s", bad, out)
+		}
+	}
+	for _, want := range []string{`id="user-content-install"`, `href="#user-content-install"`, `id="user-content-lightbox"`, `class="language-go"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %s:\n%s", want, out)
+		}
+	}
+}

@@ -21,7 +21,9 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	d.Canonical = s.cfg.SiteURL + "/"
 	d.Title = s.cfg.SiteName
 	d.Description = s.cfg.SiteTagline
-	w.Header().Set("Cache-Control", "public, max-age=300")
+	// private: the page carries a per-request CSP nonce, so shared caches
+	// (CDNs) must not hand the same nonce to many visitors.
+	w.Header().Set("Cache-Control", "private, max-age=300")
 	s.render(w, http.StatusOK, "index.html", d)
 }
 
@@ -43,12 +45,14 @@ func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
 
 	d := s.base(r)
 	d.Repo = repo
-	d.Readme = template.HTML(readme) // #nosec G203 -- sanitized via bluemonday in internal/render
+	d.Readme = template.HTML(s.images.SignHTML(readme)) // #nosec G203 -- sanitized via bluemonday in internal/render; SignHTML only appends hex signatures
 	d.ReadmeOK = strings.TrimSpace(readme) != ""
 	d.Canonical = s.cfg.SiteURL + "/repo/" + repo.Slug
 	d.Title = repo.Name + " · " + s.cfg.SiteAuthor
 	d.Description = repoDescription(*repo, s.cfg.SiteAuthor)
-	w.Header().Set("Cache-Control", "public, max-age=300")
+	// private: the page carries a per-request CSP nonce, so shared caches
+	// (CDNs) must not hand the same nonce to many visitors.
+	w.Header().Set("Cache-Control", "private, max-age=300")
 	s.render(w, http.StatusOK, "repo.html", d)
 }
 

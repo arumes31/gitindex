@@ -3,6 +3,8 @@
 package config
 
 import (
+	"log"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -33,6 +35,13 @@ type Config struct {
 	RateLimitWindow   time.Duration
 	RateLimitRequests int
 	TrustProxy        bool
+	// Forwarding headers are only honored when the direct peer is in one of
+	// these ranges, so clients cannot spoof their IP by sending them.
+	TrustedProxies []netip.Prefix
+
+	// HMAC secret for signing /img proxy URLs. Empty means a random secret is
+	// generated at startup (proxy URLs then change on every restart).
+	ImageProxySecret string
 
 	// README cache TTL — must be at least 24h per project requirement.
 	ReadmeTTL time.Duration
@@ -85,13 +94,39 @@ func envDuration(key string, def, min time.Duration) time.Duration {
 	return def
 }
 
+// defaultTrustedProxies covers reverse proxies on the same host or Docker
+// network (loopback, RFC1918, IPv6 ULA).
+const defaultTrustedProxies = "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
+
+// parsePrefixes parses a comma-separated list of CIDRs or bare IPs. Invalid
+// entries are logged and skipped.
+func parsePrefixes(s string) []netip.Prefix {
+	var out []netip.Prefix
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if p, err := netip.ParsePrefix(part); err == nil {
+			out = append(out, p.Masked())
+			continue
+		}
+		if a, err := netip.ParseAddr(part); err == nil {
+			out = append(out, netip.PrefixFrom(a, a.BitLen()))
+			continue
+		}
+		log.Printf("[warn] TRUSTED_PROXIES: ignoring invalid entry %q", part)
+	}
+	return out
+}
+
 func Load() Config {
 	const day = 24 * time.Hour
 	cfg := Config{
 		Port: env("PORT", "6541"),
 
-		GitHubUser:      env("GITHUB_USER", "arumes31"),
-		GitHubToken:     func() string {
+		GitHubUser: env("GITHUB_USER", "arumes31"),
+		GitHubToken: func() string {
 			t := env("GITHUB_TOKEN", "")
 			if t == "github_pat_antigravitydummytoken" {
 				return ""
@@ -109,6 +144,9 @@ func Load() Config {
 		RateLimitWindow:   envDuration("RATE_LIMIT_WINDOW", time.Minute, time.Second),
 		RateLimitRequests: envInt("RATE_LIMIT_REQUESTS", 120),
 		TrustProxy:        envBool("TRUST_PROXY", true),
+		TrustedProxies:    parsePrefixes(env("TRUSTED_PROXIES", defaultTrustedProxies)),
+
+		ImageProxySecret: env("IMAGE_PROXY_SECRET", ""),
 
 		// Floor of 24h enforced for READMEs per requirement.
 		ReadmeTTL:   envDuration("README_TTL", day, day),
