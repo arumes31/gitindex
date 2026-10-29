@@ -121,6 +121,10 @@ docker compose up -d --build
 > A classic token with `public_repo` scope raises this to 5000/hour. The cache
 > means few requests are made in practice, but the token avoids cold-start
 > throttling (and is needed now that issue/PR counts are fetched per repo).
+> README content is always fetched **without** the token, so GitHub itself
+> confirms a repository is still public before its README is published; those
+> requests count against the anonymous 60/hour limit, but each README is cached
+> for at least 24h. Private repositories are never listed.
 
 ## Run the prebuilt image (GHCR)
 
