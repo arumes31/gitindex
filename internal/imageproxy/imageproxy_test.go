@@ -7,9 +7,10 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
-// validateURLFast checks scheme and host only; IP validation is in the dialer.
+// validateURLFast checks scheme, host and literal IPs; resolved-IP validation is in the dialer.
 
 func TestValidateURLFastRejectsHTTP(t *testing.T) {
 	u := mustParseURL(t, "http://example.com/image.png")
@@ -39,10 +40,9 @@ func TestValidateURLFastAcceptsHTTPS(t *testing.T) {
 	}
 }
 
-// IP-level SSRF blocking is now enforced by the custom DialContext.
-// The loopback/private tests are intentionally removed from validateURLFast
-// because IP validation no longer happens there — it happens at dial-time,
-// which prevents the DNS rebinding attack window.
+// Resolved-IP SSRF blocking is enforced by the custom DialContext at dial-time,
+// which prevents the DNS rebinding attack window. validateURLFast additionally
+// rejects literal non-public IPs (including zoned IPv6) as a cheap first gate.
 
 func TestIsBlockedIP(t *testing.T) {
 	for _, ip := range []string{
@@ -58,6 +58,46 @@ func TestIsBlockedIP(t *testing.T) {
 		if isBlockedIP(netip.MustParseAddr(ip)) {
 			t.Errorf("isBlockedIP(%s) = true, want false", ip)
 		}
+	}
+}
+
+func TestIsBlockedIPRejectsZonedAddresses(t *testing.T) {
+	for _, ip := range []string{
+		"::1%eth0", "fe80::1%eth0", "fd00::1%1", "2606:50c0:8000::153%eth0", "::ffff:127.0.0.1%lo",
+	} {
+		if !isBlockedIP(netip.MustParseAddr(ip)) {
+			t.Errorf("isBlockedIP(%s) = false, want true", ip)
+		}
+	}
+}
+
+func TestValidateURLFastRejectsBlockedLiterals(t *testing.T) {
+	for _, raw := range []string{
+		"https://[::1%25eth0]/x.png",
+		"https://[fe80::1%25eth0]/x.png",
+		"https://[fd00::1%251]:8443/x.png",
+		"https://[::1]/x.png",
+		"https://127.0.0.1/x.png",
+		"https://169.254.169.254/latest",
+	} {
+		u, err := url.Parse(raw)
+		if err != nil {
+			t.Fatalf("url.Parse(%q): %v", raw, err)
+		}
+		if err := validateURLFast(u); err == nil {
+			t.Errorf("validateURLFast(%q) = nil, want error", raw)
+		}
+	}
+}
+
+func TestCheckRedirectRejectsZonedLiteral(t *testing.T) {
+	h := New(nil, time.Minute, []byte("k"))
+	req, err := http.NewRequest(http.MethodGet, "https://[fe80::1%25eth0]/x.png", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.http.CheckRedirect(req, nil); err == nil {
+		t.Error("CheckRedirect accepted zoned link-local redirect")
 	}
 }
 

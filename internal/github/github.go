@@ -46,6 +46,7 @@ type Repo struct {
 	Forks         int       `json:"forks_count"`
 	OpenIssues    int       `json:"open_issues_count"` // NOTE: GitHub counts issues + PRs here
 	OpenPRs       int       `json:"open_prs"`          // enriched via the pulls endpoint
+	Private       bool      `json:"private"`
 	Archived      bool      `json:"archived"`
 	Fork          bool      `json:"fork"`
 	DefaultBranch string    `json:"default_branch"`
@@ -119,7 +120,19 @@ func (c *Client) StartBackgroundRefresh(ctx context.Context) {
 	}()
 }
 
+// do sends an authenticated GET request using the configured GitHub token.
 func (c *Client) do(ctx context.Context, url string) (*http.Response, error) {
+	return c.request(ctx, url, true)
+}
+
+// doAnonymous sends a GET request without credentials, so GitHub itself
+// enforces that the content is publicly readable. Use it for any content that
+// ends up on public pages.
+func (c *Client) doAnonymous(ctx context.Context, url string) (*http.Response, error) {
+	return c.request(ctx, url, false)
+}
+
+func (c *Client) request(ctx context.Context, url string, auth bool) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -127,7 +140,7 @@ func (c *Client) do(ctx context.Context, url string) (*http.Response, error) {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("User-Agent", "gitindex/"+c.cfg.GitHubUser)
-	if c.cfg.GitHubToken != "" {
+	if auth && c.cfg.GitHubToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.cfg.GitHubToken)
 	}
 	return c.http.Do(req)
@@ -225,6 +238,9 @@ func (c *Client) Repos(ctx context.Context) ([]Repo, error) {
 	}
 	out := make([]Repo, 0, len(all))
 	for _, r := range all {
+		if r.Private {
+			continue
+		}
 		if r.Fork && !c.cfg.IncludeForks {
 			continue
 		}
@@ -390,7 +406,9 @@ func (c *Client) RepoBySlug(ctx context.Context, slug string) (*Repo, error) {
 
 // ReadmeHTML returns rendered, sanitized README HTML (Redis-cached >= 24h).
 func (c *Client) ReadmeHTML(ctx context.Context, r Repo) (string, error) {
-	key := "readme:html:v3:" + strings.ToLower(r.Name)
+	// v4: READMEs are now fetched anonymously; bumping the key drops any
+	// entries that were fetched with the deployment token.
+	key := "readme:html:v4:" + strings.ToLower(r.Name)
 	if b, ok := c.cache.GetBytes(ctx, key); ok {
 		return string(b), nil
 	}
@@ -408,8 +426,11 @@ func (c *Client) ReadmeHTML(ctx context.Context, r Repo) (string, error) {
 	return htmlOut, nil
 }
 
+// fetchReadmeMarkdown fetches the README without the deployment token: the
+// repo list may be stale, so only GitHub can tell whether the repository is
+// still public at the moment its content is published.
 func (c *Client) fetchReadmeMarkdown(ctx context.Context, repo string) (string, error) {
-	resp, err := c.do(ctx, fmt.Sprintf("%s/repos/%s/%s/readme", api, c.cfg.GitHubUser, repo))
+	resp, err := c.doAnonymous(ctx, fmt.Sprintf("%s/repos/%s/%s/readme", api, c.cfg.GitHubUser, repo))
 	if err != nil {
 		return "", err
 	}

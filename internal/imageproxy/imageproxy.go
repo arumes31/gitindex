@@ -93,11 +93,13 @@ var blockedPrefixes = func() []netip.Prefix {
 }()
 
 // isBlockedIP reports whether ip is outside the public unicast address space.
+// Zoned IPv6 addresses are always blocked: netip.Prefix.Contains never matches
+// an address carrying a zone, so they would otherwise slip past every prefix.
 func isBlockedIP(ip netip.Addr) bool {
-	ip = ip.Unmap()
-	if !ip.IsValid() {
+	if !ip.IsValid() || ip.Zone() != "" {
 		return true
 	}
+	ip = ip.Unmap()
 	for _, p := range blockedPrefixes {
 		if p.Contains(ip) {
 			return true
@@ -316,9 +318,10 @@ func (h *Handler) SignHTML(s string) string {
 	})
 }
 
-// validateURLFast performs a fast pre-flight check: https scheme only and
-// non-empty host. IP-level SSRF validation is done at dial-time by the
-// custom DialContext above, which closes the DNS rebinding attack window.
+// validateURLFast performs a fast pre-flight check: https scheme only,
+// non-empty host, and no literal non-public IP. Authoritative IP-level SSRF
+// validation is done at dial-time by the custom DialContext above, which
+// closes the DNS rebinding attack window.
 func validateURLFast(u *url.URL) error {
 	if u.Scheme != "https" {
 		return fmt.Errorf("scheme not allowed")
@@ -326,6 +329,9 @@ func validateURLFast(u *url.URL) error {
 	host := u.Hostname()
 	if host == "" {
 		return fmt.Errorf("empty host")
+	}
+	if ip, err := netip.ParseAddr(host); err == nil && isBlockedIP(ip) {
+		return fmt.Errorf("target address %s not allowed", host)
 	}
 	return nil
 }
