@@ -1,0 +1,2 @@
+# Keep LF in the working tree on every platform so gofmt stays clean on Windows.
+* text=auto eol=lf
