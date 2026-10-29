@@ -30,7 +30,7 @@ jobs:
           cache: true
 
       - name: Run Gosec
-        uses: securego/gosec@7b1b5cebe007d62fb58eacb90fc571112939ec30 # Go 1.27.2 support
+        uses: securego/gosec@5a4843bfdcfea7a087b5991f975b8c84d12f60e0 # Go 1.27.2 support
         env:
           # The gosec image bundles an older Go (1.26.2) with GOTOOLCHAIN=local;
           # allow it to fetch the toolchain go.mod requires (>= 1.26.4).
