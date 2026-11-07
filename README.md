@@ -14,7 +14,7 @@ Example: https://gitindex.reitetschlaeger.com/
 [![Secret Scan (Gitleaks)](https://github.com/arumes31/gitindex/actions/workflows/gitsecret.yml/badge.svg)](https://github.com/arumes31/gitindex/actions/workflows/gitsecret.yml)
 [![Build and Push Docker Image](https://github.com/arumes31/gitindex/actions/workflows/ghcr.yml/badge.svg)](https://github.com/arumes31/gitindex/actions/workflows/ghcr.yml)
 
-[![Go Version](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.26.10%20%7C%20Docker%201.27.3-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Container](https://img.shields.io/badge/ghcr.io-arumes31%2Fgitindex-2496ED?logo=docker&logoColor=white)](https://github.com/arumes31/gitindex/pkgs/container/gitindex)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -128,7 +128,7 @@ docker compose up -d --build
 
 ## Run the prebuilt image (GHCR)
 
-Every push to `master` and every `v*.*.*` tag publishes a multi-stage,
+Every push to `main` and every `v*.*.*` tag publishes a multi-stage,
 distroless image to the GitHub Container Registry:
 
 ```
@@ -205,7 +205,7 @@ docker compose up -d
 
 ## Local development (without Docker)
 
-Needs Go 1.26+ and a local Redis:
+Needs Go 1.26.10+ (Docker image pins Go 1.27.3) and a local Redis:
 
 ```bash
 docker run -d -p 6379:6379 redis:7-alpine
@@ -341,11 +341,18 @@ so you only set what you want to change.
 | Workflow | Purpose |
 |----------|---------|
 | [Go Build & Test](.github/workflows/go.yml) | `go build` + `go test` |
-| [golangci-lint](.github/workflows/golangci-lint.yml) | Linting |
+| [golangci-lint](.github/workflows/golangci-lint.yml) | Static linting and code formatting checks |
 | [gosec](.github/workflows/gosec.yml) | Static security analysis |
-| [govulncheck](.github/workflows/govulncheck.yml) | Known-vulnerability scan |
+| [govulncheck](.github/workflows/govulncheck.yml) | Known-vulnerability scanner |
 | [Gitleaks](.github/workflows/gitsecret.yml) | Secret scanning |
-| [GHCR image](.github/workflows/ghcr.yml) | Build & publish container image |
+| [GHCR image](.github/workflows/ghcr.yml) | Build & publish multi-stage container image |
+| [GHCR cleanup](.github/workflows/ghcr-cleanup.yml) | Untagged package cleanup |
+| [CodeQL](.github/workflows/codeql.yml) | GitHub security analysis |
+| [Dependency Review](.github/workflows/dependency-review.yml) | Pull request dependency security review |
+| [Release](.github/workflows/release.yml) | Automated GitHub release packaging |
+| [Gito Code Review](.github/workflows/gito-code-review.yml) | Automated pull request code reviews by Gito |
+| [OpenRabbit Reviewer](.github/workflows/openrabbit-reviewer.yml) | Automated pull request code reviews by OpenRabbit |
+| [Strix Penetration Test](.github/workflows/strix-penetration-test.yml) | Automated penetration testing on PRs and dispatch |
 
 ## License
 
