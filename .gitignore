@@ -4,5 +4,8 @@
 /out/
 *.log
 graphify-out/
+docs/
+.stfolder/
+.stignore
 
 .claudeignore
