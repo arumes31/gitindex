@@ -128,15 +128,17 @@ docker compose up -d --build
 
 ## Run the prebuilt image (GHCR)
 
-Every push to `main` and every `v*.*.*` tag publishes a multi-stage,
-distroless image to the GitHub Container Registry:
+Every push to `main` that changes more than documentation, and every `v*.*.*`
+tag, publishes a multi-stage, distroless image to the GitHub Container Registry:
 
 ```
 ghcr.io/arumes31/gitindex
 ```
 
 Available tags: `main` (latest from the default branch), `vX.Y.Z` /
-`vX.Y` (releases), and `sha-<commit>` (immutable, for pinning).
+`vX.Y` (releases), and `sha-<commit>` (immutable, for pinning). Docs-only
+commits do not get a `sha-<commit>` tag; pin the most recent commit that has
+one (listed under the repository's *Packages* page).
 
 ### Option A — `docker run` (app + your own Redis)
 
