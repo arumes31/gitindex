@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main, master ]
     tags: [ 'v*.*.*' ]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
 
 env:
   REGISTRY: ghcr.io
@@ -20,6 +25,7 @@ jobs:
   build-and-push:
     name: Build & Publish to GHCR
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
