@@ -1,11 +1,11 @@
 module gitindex
 
-go 1.26.10
+go 1.27.4
 
 require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/redis/go-redis/v9 v9.23.0
-	github.com/yuin/goldmark v1.8.6
+	github.com/yuin/goldmark v1.8.7
 	golang.org/x/net v0.62.0
 )
 
@@ -14,5 +14,5 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	go.uber.org/atomic v1.12.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 )
